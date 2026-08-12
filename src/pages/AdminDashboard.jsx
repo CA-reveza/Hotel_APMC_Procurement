@@ -1,0 +1,99 @@
+import { useEffect, useState, useCallback } from 'react'
+import { supabase } from '../supabaseClient'
+import OrderList from '../components/OrderList'
+
+export default function AdminDashboard() {
+  const [tab, setTab] = useState('overview')
+  const [hotels, setHotels] = useState([])
+  const [suppliers, setSuppliers] = useState([])
+  const [orders, setOrders] = useState([])
+
+  const loadAll = useCallback(async () => {
+    const [{ data: h }, { data: s }, { data: o }] = await Promise.all([
+      supabase.from('hotels').select('*').order('created_at', { ascending: false }),
+      supabase.from('suppliers').select('*').order('created_at', { ascending: false }),
+      supabase.from('orders').select('*, order_items(*, products(*)), hotels(name), suppliers(name, apmc_yard)').order('created_at', { ascending: false })
+    ])
+    setHotels(h || [])
+    setSuppliers(s || [])
+    setOrders(o || [])
+  }, [])
+
+  useEffect(() => { loadAll() }, [loadAll])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-orders')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => loadAll())
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [loadAll])
+
+  const gmv = orders.reduce((sum, o) => sum + Number(o.order_total || 0), 0)
+  const commissionEarned = orders.reduce((sum, o) => sum + Number(o.commission_amount || 0), 0)
+  const deliveryContribution = orders.reduce((sum, o) => sum + Number(o.delivery_contribution || 0), 0)
+  const activeOrders = orders.filter((o) => !['delivered', 'rejected', 'cancelled'].includes(o.status)).length
+
+  return (
+    <div>
+      <h2>Admin overview</h2>
+      <div className="tabs">
+        <button className={tab === 'overview' ? 'tab active' : 'tab'} onClick={() => setTab('overview')}>Overview</button>
+        <button className={tab === 'orders' ? 'tab active' : 'tab'} onClick={() => setTab('orders')}>All orders ({orders.length})</button>
+        <button className={tab === 'hotels' ? 'tab active' : 'tab'} onClick={() => setTab('hotels')}>Hotels ({hotels.length})</button>
+        <button className={tab === 'suppliers' ? 'tab active' : 'tab'} onClick={() => setTab('suppliers')}>Suppliers ({suppliers.length})</button>
+      </div>
+
+      {tab === 'overview' && (
+        <div className="stat-grid">
+          <StatCard label="Total GMV" value={`₹${gmv.toLocaleString('en-IN')}`} />
+          <StatCard label="Commission earned" value={`₹${commissionEarned.toLocaleString('en-IN')}`} />
+          <StatCard label="Delivery contribution" value={`₹${deliveryContribution.toLocaleString('en-IN')}`} />
+          <StatCard label="Gross contribution" value={`₹${(commissionEarned + deliveryContribution).toLocaleString('en-IN')}`} />
+          <StatCard label="Active orders" value={activeOrders} />
+          <StatCard label="Hotels onboarded" value={hotels.length} />
+          <StatCard label="Suppliers onboarded" value={suppliers.length} />
+          <StatCard label="Total orders" value={orders.length} />
+        </div>
+      )}
+
+      {tab === 'orders' && <OrderList orders={orders} viewerRole="admin" onChanged={loadAll} />}
+
+      {tab === 'hotels' && (
+        <table className="table">
+          <thead><tr><th>Name</th><th>City</th><th>Address</th><th>GST</th><th>Credit allowed</th></tr></thead>
+          <tbody>
+            {hotels.map((h) => (
+              <tr key={h.id}>
+                <td>{h.name}</td><td>{h.city}</td><td>{h.address}</td><td>{h.gst_number}</td>
+                <td>{h.credit_allowed ? 'Yes' : 'No'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {tab === 'suppliers' && (
+        <table className="table">
+          <thead><tr><th>Name</th><th>APMC yard</th><th>Address</th><th>GST</th><th>Rating</th></tr></thead>
+          <tbody>
+            {suppliers.map((s) => (
+              <tr key={s.id}>
+                <td>{s.name}</td><td>{s.apmc_yard}</td><td>{s.address}</td><td>{s.gst_number}</td><td>{s.rating}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
+function StatCard({ label, value }) {
+  return (
+    <div className="card stat-card">
+      <div className="stat-value">{value}</div>
+      <div className="stat-label">{label}</div>
+    </div>
+  )
+}
