@@ -1,16 +1,22 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../supabaseClient'
 import OrderList from '../components/OrderList'
+import QuoteRequests from '../components/QuoteRequests'
+import { downloadHotelOrderTemplate, parseHotelOrderTemplate } from '../lib/excelTemplates'
 
 export default function HotelDashboard({ hotel }) {
-  const [tab, setTab] = useState('order') // 'order' | 'orders'
+  const [tab, setTab] = useState('order') // 'order' | 'orders' | 'bidding'
   const [suppliers, setSuppliers] = useState([])
   const [supplierId, setSupplierId] = useState('')
   const [priceRows, setPriceRows] = useState([]) // supplier_prices joined with products
   const [cart, setCart] = useState({}) // product_id -> qty
   const [orders, setOrders] = useState([])
+  const [allProducts, setAllProducts] = useState([])
   const [placing, setPlacing] = useState(false)
   const [message, setMessage] = useState('')
+  const [bulkMessage, setBulkMessage] = useState('')
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const fileInputRef = useRef(null)
 
   const loadSuppliers = useCallback(async () => {
     const { data } = await supabase.from('suppliers').select('*').order('name')
@@ -43,9 +49,15 @@ export default function HotelDashboard({ hotel }) {
     setOrders(data || [])
   }, [hotel])
 
+  const loadProducts = useCallback(async () => {
+    const { data } = await supabase.from('products').select('*').eq('active', true).order('name')
+    setAllProducts(data || [])
+  }, [])
+
   useEffect(() => { loadSuppliers() }, [loadSuppliers])
   useEffect(() => { loadPrices(supplierId) }, [supplierId, loadPrices])
   useEffect(() => { loadOrders() }, [loadOrders])
+  useEffect(() => { loadProducts() }, [loadProducts])
 
   // Realtime: refresh orders whenever this hotel's orders change (e.g. supplier accepts/updates)
   useEffect(() => {
@@ -62,7 +74,7 @@ export default function HotelDashboard({ hotel }) {
 
   const cartLines = useMemo(() => {
     return priceRows
-      .filter((row) => cart[row.product_id] > 0)
+      .filter((row) => cart[row.product_id] > 0 && row.in_stock !== false)
       .map((row) => ({
         product_id: row.product_id,
         name: row.products?.name,
@@ -74,9 +86,38 @@ export default function HotelDashboard({ hotel }) {
   }, [cart, priceRows])
 
   const cartTotal = cartLines.reduce((sum, l) => sum + l.lineTotal, 0)
+  const selectedSupplierName = suppliers.find((s) => s.id === supplierId)?.name
 
   const setQty = (productId, qty) => {
     setCart((prev) => ({ ...prev, [productId]: qty }))
+  }
+
+  const handleDownloadOrderTemplate = () => {
+    downloadHotelOrderTemplate(priceRows, selectedSupplierName)
+  }
+
+  const handleUploadOrderTemplate = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setBulkBusy(true)
+    setBulkMessage('')
+    try {
+      const { cart: parsedCart, skippedOutOfStock, unmatched } = await parseHotelOrderTemplate(file, priceRows)
+      const count = Object.keys(parsedCart).length
+      if (!count) {
+        setBulkMessage('No orderable quantities found in that file. Fill in the Qty column and try again.')
+      } else {
+        setCart((prev) => ({ ...prev, ...parsedCart }))
+        let msg = `Added ${count} item${count === 1 ? '' : 's'} to the cart from the file.`
+        if (skippedOutOfStock.length) msg += ` Skipped out-of-stock: ${skippedOutOfStock.join(', ')}.`
+        if (unmatched.length) msg += ` Not found in this supplier's list: ${unmatched.join(', ')}.`
+        setBulkMessage(msg)
+      }
+    } catch (err) {
+      setBulkMessage(`Couldn't read that file: ${err.message}`)
+    }
+    setBulkBusy(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const placeOrder = async () => {
@@ -120,6 +161,7 @@ export default function HotelDashboard({ hotel }) {
       <div className="tabs">
         <button className={tab === 'order' ? 'tab active' : 'tab'} onClick={() => setTab('order')}>Place order</button>
         <button className={tab === 'orders' ? 'tab active' : 'tab'} onClick={() => setTab('orders')}>My orders ({orders.length})</button>
+        <button className={tab === 'bidding' ? 'tab active' : 'tab'} onClick={() => setTab('bidding')}>Request quotes</button>
       </div>
 
       {tab === 'order' && (
@@ -132,30 +174,57 @@ export default function HotelDashboard({ hotel }) {
               ))}
             </select>
 
+            {priceRows.length > 0 && (
+              <div className="bulk-bar">
+                <button className="btn btn-ghost-dark" onClick={handleDownloadOrderTemplate}>⬇ Download order sheet (.xlsx)</button>
+                <label className="btn btn-ghost-dark upload-label">
+                  {bulkBusy ? 'Uploading…' : '⬆ Upload filled sheet'}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handleUploadOrderTemplate}
+                    disabled={bulkBusy}
+                    hidden
+                  />
+                </label>
+              </div>
+            )}
+            {bulkMessage && <div className="alert alert-info">{bulkMessage}</div>}
+
             <table className="table">
               <thead>
-                <tr><th>Product</th><th>Price</th><th>Grade</th><th>Qty</th></tr>
+                <tr><th>Product</th><th>Price</th><th>Grade</th><th>Stock</th><th>Qty</th></tr>
               </thead>
               <tbody>
-                {priceRows.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.products?.name}</td>
-                    <td>₹{row.price} / {row.products?.unit}</td>
-                    <td>{row.grade}</td>
-                    <td>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        className="qty-input"
-                        value={cart[row.product_id] || ''}
-                        onChange={(e) => setQty(row.product_id, parseFloat(e.target.value) || 0)}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                {priceRows.map((row) => {
+                  const outOfStock = row.in_stock === false
+                  return (
+                    <tr key={row.id} className={outOfStock ? 'row-disabled' : ''}>
+                      <td>{row.products?.name}</td>
+                      <td>₹{row.price} / {row.products?.unit}</td>
+                      <td>{row.grade}</td>
+                      <td>
+                        <span className={`stock-badge ${outOfStock ? 'out-of-stock' : 'in-stock'}`}>
+                          {outOfStock ? 'Out of stock' : 'In stock'}
+                        </span>
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          className="qty-input"
+                          disabled={outOfStock}
+                          value={outOfStock ? '' : (cart[row.product_id] || '')}
+                          onChange={(e) => setQty(row.product_id, parseFloat(e.target.value) || 0)}
+                        />
+                      </td>
+                    </tr>
+                  )
+                })}
                 {!priceRows.length && (
-                  <tr><td colSpan={4} className="muted">No prices published by this supplier yet.</td></tr>
+                  <tr><td colSpan={5} className="muted">No prices published by this supplier yet.</td></tr>
                 )}
               </tbody>
             </table>
@@ -184,6 +253,10 @@ export default function HotelDashboard({ hotel }) {
       )}
 
       {tab === 'orders' && <OrderList orders={orders} viewerRole="hotel" onChanged={loadOrders} />}
+
+      {tab === 'bidding' && (
+        <QuoteRequests hotel={hotel} products={allProducts} onOrderPlaced={loadOrders} />
+      )}
     </div>
   )
 }

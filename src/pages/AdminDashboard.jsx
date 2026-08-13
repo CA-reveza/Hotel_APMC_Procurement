@@ -7,16 +7,19 @@ export default function AdminDashboard() {
   const [hotels, setHotels] = useState([])
   const [suppliers, setSuppliers] = useState([])
   const [orders, setOrders] = useState([])
+  const [deliveries, setDeliveries] = useState([])
 
   const loadAll = useCallback(async () => {
-    const [{ data: h }, { data: s }, { data: o }] = await Promise.all([
+    const [{ data: h }, { data: s }, { data: o }, { data: d }] = await Promise.all([
       supabase.from('hotels').select('*').order('created_at', { ascending: false }),
       supabase.from('suppliers').select('*').order('created_at', { ascending: false }),
-      supabase.from('orders').select('*, order_items(*, products(*)), hotels(name), suppliers(name, apmc_yard)').order('created_at', { ascending: false })
+      supabase.from('orders').select('*, order_items(*, products(*)), hotels(name), suppliers(name, apmc_yard)').order('created_at', { ascending: false }),
+      supabase.from('deliveries').select('*, orders(id, hotels(name), suppliers(name))').order('created_at', { ascending: false })
     ])
     setHotels(h || [])
     setSuppliers(s || [])
     setOrders(o || [])
+    setDeliveries(d || [])
   }, [])
 
   useEffect(() => { loadAll() }, [loadAll])
@@ -33,6 +36,8 @@ export default function AdminDashboard() {
   const commissionEarned = orders.reduce((sum, o) => sum + Number(o.commission_amount || 0), 0)
   const deliveryContribution = orders.reduce((sum, o) => sum + Number(o.delivery_contribution || 0), 0)
   const activeOrders = orders.filter((o) => !['delivered', 'rejected', 'cancelled'].includes(o.status)).length
+  const paidOrders = orders.filter((o) => o.payment_status === 'paid').length
+  const whatsappOrders = orders.filter((o) => o.source === 'whatsapp').length
 
   return (
     <div>
@@ -42,6 +47,7 @@ export default function AdminDashboard() {
         <button className={tab === 'orders' ? 'tab active' : 'tab'} onClick={() => setTab('orders')}>All orders ({orders.length})</button>
         <button className={tab === 'hotels' ? 'tab active' : 'tab'} onClick={() => setTab('hotels')}>Hotels ({hotels.length})</button>
         <button className={tab === 'suppliers' ? 'tab active' : 'tab'} onClick={() => setTab('suppliers')}>Suppliers ({suppliers.length})</button>
+        <button className={tab === 'deliveries' ? 'tab active' : 'tab'} onClick={() => setTab('deliveries')}>Deliveries ({deliveries.length})</button>
       </div>
 
       {tab === 'overview' && (
@@ -51,6 +57,8 @@ export default function AdminDashboard() {
           <StatCard label="Delivery contribution" value={`₹${deliveryContribution.toLocaleString('en-IN')}`} />
           <StatCard label="Gross contribution" value={`₹${(commissionEarned + deliveryContribution).toLocaleString('en-IN')}`} />
           <StatCard label="Active orders" value={activeOrders} />
+          <StatCard label="Paid orders" value={paidOrders} />
+          <StatCard label="Orders via WhatsApp" value={whatsappOrders} />
           <StatCard label="Hotels onboarded" value={hotels.length} />
           <StatCard label="Suppliers onboarded" value={suppliers.length} />
           <StatCard label="Total orders" value={orders.length} />
@@ -82,6 +90,26 @@ export default function AdminDashboard() {
                 <td>{s.name}</td><td>{s.apmc_yard}</td><td>{s.address}</td><td>{s.gst_number}</td><td>{s.rating}</td>
               </tr>
             ))}
+          </tbody>
+        </table>
+      )}
+
+      {tab === 'deliveries' && (
+        <table className="table">
+          <thead><tr><th>Order</th><th>Hotel</th><th>Supplier</th><th>Type</th><th>Hub / Partner</th><th>Picked up</th><th>Delivered</th></tr></thead>
+          <tbody>
+            {deliveries.map((d) => (
+              <tr key={d.id}>
+                <td>#{d.order_id.slice(0, 8)}</td>
+                <td>{d.orders?.hotels?.name}</td>
+                <td>{d.orders?.suppliers?.name}</td>
+                <td>{d.delivery_type}</td>
+                <td>{d.delivery_type === 'hub' ? d.hub_name : d.partner_name}</td>
+                <td>{d.picked_up_at ? new Date(d.picked_up_at).toLocaleString('en-IN') : '—'}</td>
+                <td>{d.delivered_at ? new Date(d.delivered_at).toLocaleString('en-IN') : '—'}</td>
+              </tr>
+            ))}
+            {!deliveries.length && <tr><td colSpan={7} className="muted">No deliveries set up yet.</td></tr>}
           </tbody>
         </table>
       )}

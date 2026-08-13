@@ -1,13 +1,18 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../supabaseClient'
 import OrderList from '../components/OrderList'
+import OpenRequests from '../components/OpenRequests'
+import { downloadSupplierPriceTemplate, parseSupplierPriceTemplate } from '../lib/excelTemplates'
 
 export default function SupplierDashboard({ supplier }) {
   const [tab, setTab] = useState('orders')
   const [products, setProducts] = useState([])
-  const [myPrices, setMyPrices] = useState([]) // keyed by product_id
+  const [myPrices, setMyPrices] = useState({}) // keyed by product_id
   const [orders, setOrders] = useState([])
   const [saving, setSaving] = useState('')
+  const [bulkMessage, setBulkMessage] = useState('')
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const fileInputRef = useRef(null)
 
   const loadProducts = useCallback(async () => {
     const { data } = await supabase.from('products').select('*').eq('active', true).order('name')
@@ -52,7 +57,7 @@ export default function SupplierDashboard({ supplier }) {
     return () => supabase.removeChannel(channel)
   }, [supplier, loadOrders])
 
-  const savePrice = async (productId, price, grade, availableQty) => {
+  const savePrice = async (productId, price, grade, availableQty, inStock) => {
     if (!price || price <= 0) return
     setSaving(productId)
     const today = new Date().toISOString().slice(0, 10)
@@ -65,6 +70,7 @@ export default function SupplierDashboard({ supplier }) {
           price,
           grade,
           available_qty: availableQty || 0,
+          in_stock: inStock,
           price_date: today
         },
         { onConflict: 'supplier_id,product_id,price_date' }
@@ -73,22 +79,80 @@ export default function SupplierDashboard({ supplier }) {
     if (!error) loadMyPrices()
   }
 
+  const handleDownloadTemplate = () => {
+    downloadSupplierPriceTemplate(products, myPrices, supplier?.name)
+  }
+
+  const handleUploadTemplate = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setBulkBusy(true)
+    setBulkMessage('')
+    try {
+      const { rows, unmatched } = await parseSupplierPriceTemplate(file, products)
+      if (!rows.length) {
+        setBulkMessage('No valid priced rows found in the file. Make sure the Price column is filled in.')
+        setBulkBusy(false)
+        if (fileInputRef.current) fileInputRef.current.value = ''
+        return
+      }
+      const today = new Date().toISOString().slice(0, 10)
+      const payload = rows.map((r) => ({ ...r, supplier_id: supplier.id, price_date: today }))
+      const { error } = await supabase
+        .from('supplier_prices')
+        .upsert(payload, { onConflict: 'supplier_id,product_id,price_date' })
+
+      if (error) {
+        setBulkMessage(`Upload failed: ${error.message}`)
+      } else {
+        let msg = `Updated ${rows.length} price${rows.length === 1 ? '' : 's'}.`
+        if (unmatched.length) msg += ` ${unmatched.length} row(s) didn't match a catalogue product: ${unmatched.join(', ')}.`
+        setBulkMessage(msg)
+        loadMyPrices()
+      }
+    } catch (err) {
+      setBulkMessage(`Couldn't read that file: ${err.message}`)
+    }
+    setBulkBusy(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   return (
     <div>
       <h2>{supplier?.name}</h2>
       <div className="tabs">
         <button className={tab === 'orders' ? 'tab active' : 'tab'} onClick={() => setTab('orders')}>Incoming orders ({orders.length})</button>
         <button className={tab === 'prices' ? 'tab active' : 'tab'} onClick={() => setTab('prices')}>Today's prices</button>
+        <button className={tab === 'bidding' ? 'tab active' : 'tab'} onClick={() => setTab('bidding')}>Open requests</button>
       </div>
 
       {tab === 'orders' && <OrderList orders={orders} viewerRole="supplier" onChanged={loadOrders} />}
 
+      {tab === 'bidding' && <OpenRequests supplier={supplier} />}
+
       {tab === 'prices' && (
         <div className="card">
-          <p className="muted">Set today's price, grade and available quantity per product. Hotels see these instantly.</p>
+          <p className="muted">Set today's price, grade, stock status and available quantity per product. Hotels see these instantly.</p>
+
+          <div className="bulk-bar">
+            <button className="btn btn-ghost-dark" onClick={handleDownloadTemplate}>⬇ Download price template (.xlsx)</button>
+            <label className="btn btn-ghost-dark upload-label">
+              {bulkBusy ? 'Uploading…' : '⬆ Upload filled template'}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleUploadTemplate}
+                disabled={bulkBusy}
+                hidden
+              />
+            </label>
+          </div>
+          {bulkMessage && <div className="alert alert-info">{bulkMessage}</div>}
+
           <table className="table">
             <thead>
-              <tr><th>Product</th><th>Price (₹)</th><th>Grade</th><th>Available qty</th><th></th></tr>
+              <tr><th>Product</th><th>Price (₹)</th><th>Grade</th><th>Stock</th><th>Available qty</th><th></th></tr>
             </thead>
             <tbody>
               {products.map((p) => {
@@ -115,11 +179,13 @@ function PriceRow({ product, existing, saving, onSave }) {
   const [price, setPrice] = useState(existing?.price ?? '')
   const [grade, setGrade] = useState(existing?.grade ?? 'A')
   const [qty, setQty] = useState(existing?.available_qty ?? '')
+  const [inStock, setInStock] = useState(existing?.in_stock ?? true)
 
   useEffect(() => {
     setPrice(existing?.price ?? '')
     setGrade(existing?.grade ?? 'A')
     setQty(existing?.available_qty ?? '')
+    setInStock(existing?.in_stock ?? true)
   }, [existing])
 
   return (
@@ -132,9 +198,18 @@ function PriceRow({ product, existing, saving, onSave }) {
           <option value="B">B</option>
         </select>
       </td>
+      <td>
+        <button
+          type="button"
+          className={`stock-toggle ${inStock ? 'in-stock' : 'out-of-stock'}`}
+          onClick={() => setInStock((v) => !v)}
+        >
+          {inStock ? 'In stock' : 'Out of stock'}
+        </button>
+      </td>
       <td><input type="number" min="0" className="qty-input" value={qty} onChange={(e) => setQty(e.target.value)} /></td>
       <td>
-        <button className="btn btn-primary" disabled={saving} onClick={() => onSave(product.id, parseFloat(price), grade, parseFloat(qty))}>
+        <button className="btn btn-primary" disabled={saving} onClick={() => onSave(product.id, parseFloat(price), grade, parseFloat(qty), inStock)}>
           {saving ? 'Saving…' : existing ? 'Update' : 'Publish'}
         </button>
       </td>

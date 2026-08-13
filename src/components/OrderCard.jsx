@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
+import PaymentButton from './PaymentButton'
+import DeliveryPanel from './DeliveryPanel'
+import { downloadInvoice } from '../lib/invoice'
 
 const STATUS_FLOW = {
   pending: ['accepted', 'rejected'],
@@ -43,6 +46,13 @@ export default function OrderCard({ order, viewerRole, onChanged }) {
         <span className={`status-badge status-${order.status}`}>{STATUS_LABEL[order.status]}</span>
       </div>
 
+      <div className="order-card-badges">
+        <span className={`pay-badge pay-${order.payment_status || 'unpaid'}`}>
+          {order.payment_status === 'paid' ? '✓ Paid' : 'Payment pending'}
+        </span>
+        {order.source === 'whatsapp' && <span className="pay-badge pay-whatsapp">via WhatsApp</span>}
+      </div>
+
       <div className="order-card-meta">
         {order.hotels?.name && <div>Hotel: {order.hotels.name}</div>}
         {order.suppliers?.name && <div>Supplier: {order.suppliers.name} {order.suppliers.apmc_yard ? `(${order.suppliers.apmc_yard})` : ''}</div>}
@@ -72,20 +82,26 @@ export default function OrderCard({ order, viewerRole, onChanged }) {
         )}
       </div>
 
-      {nextOptions.length > 0 && (
-        <div className="order-card-actions">
-          {nextOptions.map((status) => (
-            <button
-              key={status}
-              className={status === 'rejected' ? 'btn btn-danger' : 'btn btn-primary'}
-              disabled={busy}
-              onClick={() => updateStatus(status)}
-            >
-              {busy ? '…' : `Mark ${STATUS_LABEL[status]}`}
-            </button>
-          ))}
-        </div>
-      )}
+      <DeliveryPanel orderId={order.id} viewerRole={viewerRole} />
+
+      <div className="order-card-actions">
+        {nextOptions.map((status) => (
+          <button
+            key={status}
+            className={status === 'rejected' ? 'btn btn-danger' : 'btn btn-primary'}
+            disabled={busy}
+            onClick={() => updateStatus(status)}
+          >
+            {busy ? '…' : `Mark ${STATUS_LABEL[status]}`}
+          </button>
+        ))}
+        {viewerRole === 'hotel' && order.payment_status !== 'paid' && !['rejected', 'cancelled'].includes(order.status) && (
+          <PaymentButton order={order} onPaid={onChanged} />
+        )}
+        {order.status === 'delivered' && (
+          <button className="btn btn-ghost-dark" onClick={() => downloadInvoice(order)}>Download invoice</button>
+        )}
+      </div>
     </div>
   )
 }
