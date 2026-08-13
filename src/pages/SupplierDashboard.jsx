@@ -35,7 +35,7 @@ export default function SupplierDashboard({ supplier }) {
     if (!supplier?.id) return
     const { data } = await supabase
       .from('orders')
-      .select('*, order_items(*, products(*)), hotels(name, address)')
+      .select('*, order_items(*, products(*)), hotels(name, address), suppliers(name, apmc_yard)')
       .eq('supplier_id', supplier.id)
       .order('created_at', { ascending: false })
     setOrders(data || [])

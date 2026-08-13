@@ -14,9 +14,21 @@ export function downloadInvoice(order) {
   doc.text(`Date: ${new Date(order.created_at).toLocaleString('en-IN')}`, 14, 42)
   doc.text(`Status: ${order.status}   Payment: ${order.payment_status || 'unpaid'}`, 14, 48)
 
-  doc.text(`Hotel: ${order.hotels?.name || ''}`, 14, 58)
-  doc.text(`Deliver to: ${order.delivery_address || ''}`, 14, 64)
-  doc.text(`Supplier: ${order.suppliers?.name || ''} ${order.suppliers?.apmc_yard ? `(${order.suppliers.apmc_yard})` : ''}`, 14, 70)
+  let y = 58
+  const supplierLabel = order.suppliers?.name
+    ? `${order.suppliers.name}${order.suppliers.apmc_yard ? ` (${order.suppliers.apmc_yard})` : ''}`
+    : ''
+  const infoLines = [
+    ['Hotel', order.hotels?.name],
+    ['Deliver to', order.delivery_address || order.hotels?.address],
+    ['Supplier', supplierLabel]
+  ].filter(([, value]) => value)
+
+  for (const [label, value] of infoLines) {
+    doc.text(`${label}: ${value}`, 14, y)
+    y += 6
+  }
+  if (!infoLines.length) y += 2 // keep spacing sane if everything was blank
 
   const rows = (order.order_items || []).map((it) => [
     it.products?.name || '',
@@ -26,7 +38,7 @@ export function downloadInvoice(order) {
   ])
 
   autoTable(doc, {
-    startY: 78,
+    startY: y + 4,
     head: [['Item', 'Qty', 'Rate', 'Amount']],
     body: rows,
     styles: { fontSize: 9 },

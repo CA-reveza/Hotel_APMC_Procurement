@@ -43,7 +43,7 @@ export default function HotelDashboard({ hotel }) {
     if (!hotel?.id) return
     const { data } = await supabase
       .from('orders')
-      .select('*, order_items(*, products(*)), suppliers(name, apmc_yard)')
+      .select('*, order_items(*, products(*)), suppliers(name, apmc_yard), hotels(name, address)')
       .eq('hotel_id', hotel.id)
       .order('created_at', { ascending: false })
     setOrders(data || [])
