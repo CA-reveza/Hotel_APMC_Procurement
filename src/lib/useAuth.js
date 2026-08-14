@@ -37,6 +37,13 @@ export function useAuth() {
         .eq('profile_id', userId)
         .maybeSingle()
       setOrgRecord(data || null)
+    } else if (profileRow?.role === 'driver') {
+      const { data } = await supabase
+        .from('drivers')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle()
+      setOrgRecord(data || null)
     } else {
       setOrgRecord(null)
     }

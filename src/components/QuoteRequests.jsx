@@ -1,19 +1,23 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Fragment } from 'react'
 import { supabase } from '../supabaseClient'
 
 export default function QuoteRequests({ hotel, products, onOrderPlaced }) {
   const [requests, setRequests] = useState([])
-  const [productId, setProductId] = useState(products[0]?.id || '')
-  const [quantity, setQuantity] = useState('')
+  const [selected, setSelected] = useState({}) // product_id -> qty (only present if checked)
   const [notes, setNotes] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [expandedQuote, setExpandedQuote] = useState(null) // quote id showing itemized breakdown
 
   const load = useCallback(async () => {
     if (!hotel?.id) return
     const { data } = await supabase
       .from('quote_requests')
-      .select('*, products(*), supplier_quotes(*, suppliers(name, apmc_yard))')
+      .select(`
+        *,
+        quote_request_items(*, products(*)),
+        supplier_quotes(*, suppliers(name, apmc_yard), supplier_quote_items(*, products(*)))
+      `)
       .eq('hotel_id', hotel.id)
       .order('created_at', { ascending: false })
     setRequests(data || [])
@@ -26,24 +30,68 @@ export default function QuoteRequests({ hotel, products, onOrderPlaced }) {
     const channel = supabase
       .channel(`hotel-quotes-${hotel.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'supplier_quotes' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'supplier_quote_items' }, () => load())
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [hotel, load])
 
+  const toggleItem = (productId, checked) => {
+    setSelected((prev) => {
+      const next = { ...prev }
+      if (checked) next[productId] = next[productId] || 1
+      else delete next[productId]
+      return next
+    })
+  }
+
+  const setItemQty = (productId, qty) => {
+    setSelected((prev) => ({ ...prev, [productId]: qty }))
+  }
+
+  const selectedCount = Object.keys(selected).length
+
   const createRequest = async (e) => {
     e.preventDefault()
-    if (!productId || !quantity) return
+    const items = Object.entries(selected).filter(([, qty]) => qty > 0)
+    if (!items.length) {
+      setMessage('Tick at least one item and enter a quantity before posting.')
+      return
+    }
     setBusy(true)
-    const { error } = await supabase.from('quote_requests').insert({
-      hotel_id: hotel.id, product_id: productId, quantity: parseFloat(quantity), notes
-    })
+    setMessage('')
+
+    const { data: request, error: reqErr } = await supabase
+      .from('quote_requests')
+      .insert({ hotel_id: hotel.id, notes })
+      .select()
+      .single()
+
+    if (reqErr) {
+      setMessage(`Failed to post request: ${reqErr.message}`)
+      setBusy(false)
+      return
+    }
+
+    const itemRows = items.map(([product_id, qty]) => ({
+      request_id: request.id,
+      product_id,
+      quantity: parseFloat(qty)
+    }))
+    const { error: itemsErr } = await supabase.from('quote_request_items').insert(itemRows)
+
     setBusy(false)
-    if (!error) { setQuantity(''); setNotes(''); load() }
+    if (itemsErr) {
+      setMessage(`Request created but items failed: ${itemsErr.message}`)
+    } else {
+      setMessage(`Posted a request for ${items.length} item${items.length === 1 ? '' : 's'} to every supplier.`)
+      setSelected({})
+      setNotes('')
+      load()
+    }
   }
 
   const acceptQuote = async (request, quote) => {
     setMessage('')
-    // Create the order directly from the accepted quote
     const { data: order, error: orderErr } = await supabase
       .from('orders')
       .insert({ hotel_id: hotel.id, supplier_id: quote.supplier_id, delivery_address: hotel.address })
@@ -51,12 +99,19 @@ export default function QuoteRequests({ hotel, products, onOrderPlaced }) {
       .single()
     if (orderErr) { setMessage(`Failed: ${orderErr.message}`); return }
 
-    await supabase.from('order_items').insert({
-      order_id: order.id, product_id: request.product_id, quantity: request.quantity, unit_price: quote.price
+    const items = (quote.supplier_quote_items || []).map((sqi) => {
+      const reqItem = request.quote_request_items?.find((qi) => qi.product_id === sqi.product_id)
+      return {
+        order_id: order.id,
+        product_id: sqi.product_id,
+        quantity: reqItem?.quantity || 0,
+        unit_price: sqi.price
+      }
     })
+    await supabase.from('order_items').insert(items)
     await supabase.from('quote_requests').update({ status: 'closed' }).eq('id', request.id)
 
-    setMessage(`Order placed with ${quote.suppliers?.name} at ₹${quote.price}/unit.`)
+    setMessage(`Order placed with ${quote.suppliers?.name} — total ₹${Number(quote.total_price).toFixed(2)}.`)
     load()
     onOrderPlaced?.()
   }
@@ -65,15 +120,42 @@ export default function QuoteRequests({ hotel, products, onOrderPlaced }) {
     <div>
       <div className="card">
         <h3>Request quotes from suppliers</h3>
-        <p className="muted small">Broadcast a requirement to every registered supplier and compare their bids.</p>
-        <form onSubmit={createRequest} className="form form-row">
-          <select value={productId} onChange={(e) => setProductId(e.target.value)}>
-            {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.unit})</option>)}
-          </select>
-          <input type="number" min="0" step="0.5" placeholder="Quantity" value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
+        <p className="muted small">Tick the items you need, set quantities, and broadcast the requirement to every registered supplier for comparison.</p>
+
+        <table className="table small">
+          <thead><tr><th></th><th>Product</th><th>Qty</th></tr></thead>
+          <tbody>
+            {products.map((p) => {
+              const checked = selected[p.id] !== undefined
+              return (
+                <tr key={p.id}>
+                  <td>
+                    <input type="checkbox" checked={checked} onChange={(e) => toggleItem(p.id, e.target.checked)} />
+                  </td>
+                  <td>{p.name} <span className="muted small">/ {p.unit}</span></td>
+                  <td>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      className="qty-input"
+                      disabled={!checked}
+                      value={checked ? selected[p.id] : ''}
+                      onChange={(e) => setItemQty(p.id, parseFloat(e.target.value) || 0)}
+                    />
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+
+        <div className="form-row" style={{ marginTop: 12 }}>
           <input placeholder="Notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
-          <button className="btn btn-primary" disabled={busy} type="submit">{busy ? 'Posting…' : 'Post request'}</button>
-        </form>
+          <button className="btn btn-primary" disabled={busy || !selectedCount} onClick={createRequest}>
+            {busy ? 'Posting…' : `Post request${selectedCount ? ` (${selectedCount} item${selectedCount === 1 ? '' : 's'})` : ''}`}
+          </button>
+        </div>
         {message && <div className="alert alert-info">{message}</div>}
       </div>
 
@@ -81,8 +163,11 @@ export default function QuoteRequests({ hotel, products, onOrderPlaced }) {
         <div key={r.id} className="card">
           <div className="order-card-header">
             <div>
-              <strong>{r.products?.name} × {r.quantity} {r.products?.unit}</strong>
-              {r.notes && <div className="muted small">{r.notes}</div>}
+              <strong>{r.quote_request_items?.length || 0} item{(r.quote_request_items?.length || 0) === 1 ? '' : 's'} requested</strong>
+              <div className="muted small">
+                {r.quote_request_items?.map((qi) => `${qi.products?.name} × ${qi.quantity} ${qi.products?.unit}`).join(', ')}
+              </div>
+              {r.notes && <div className="muted small">Note: {r.notes}</div>}
             </div>
             <span className={`status-badge status-${r.status === 'open' ? 'pending' : 'delivered'}`}>{r.status}</span>
           </div>
@@ -90,20 +175,44 @@ export default function QuoteRequests({ hotel, products, onOrderPlaced }) {
           {!r.supplier_quotes?.length && <p className="muted small">No quotes yet.</p>}
           {r.supplier_quotes?.length > 0 && (
             <table className="table small">
-              <thead><tr><th>Supplier</th><th>Price</th><th>Grade</th><th>Available</th><th></th></tr></thead>
+              <thead><tr><th>Supplier</th><th>Total</th><th></th><th></th></tr></thead>
               <tbody>
-                {[...r.supplier_quotes].sort((a, b) => a.price - b.price).map((q) => (
-                  <tr key={q.id}>
-                    <td>{q.suppliers?.name} {q.suppliers?.apmc_yard ? `(${q.suppliers.apmc_yard})` : ''}</td>
-                    <td>₹{q.price}</td>
-                    <td>{q.grade}</td>
-                    <td>{q.available_qty ?? '—'}</td>
-                    <td>
-                      {r.status === 'open' && (
-                        <button className="btn btn-primary" onClick={() => acceptQuote(r, q)}>Accept & order</button>
-                      )}
-                    </td>
-                  </tr>
+                {[...r.supplier_quotes].sort((a, b) => a.total_price - b.total_price).map((q) => (
+                  <Fragment key={q.id}>
+                    <tr>
+                      <td>{q.suppliers?.name} {q.suppliers?.apmc_yard ? `(${q.suppliers.apmc_yard})` : ''}</td>
+                      <td>₹{Number(q.total_price).toFixed(2)}</td>
+                      <td>
+                        <button className="btn-link" onClick={() => setExpandedQuote(expandedQuote === q.id ? null : q.id)}>
+                          {expandedQuote === q.id ? 'Hide items' : 'View items'}
+                        </button>
+                      </td>
+                      <td>
+                        {r.status === 'open' && (
+                          <button className="btn btn-primary" onClick={() => acceptQuote(r, q)}>Accept & order</button>
+                        )}
+                      </td>
+                    </tr>
+                    {expandedQuote === q.id && (
+                      <tr>
+                        <td colSpan={4}>
+                          <table className="table small">
+                            <thead><tr><th>Product</th><th>Price</th><th>Grade</th><th>Available</th></tr></thead>
+                            <tbody>
+                              {q.supplier_quote_items?.map((sqi) => (
+                                <tr key={sqi.id}>
+                                  <td>{sqi.products?.name}</td>
+                                  <td>₹{sqi.price}</td>
+                                  <td>{sqi.grade}</td>
+                                  <td>{sqi.available_qty ?? '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

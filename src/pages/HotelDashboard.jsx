@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../supabaseClient'
-import OrderList from '../components/OrderList'
+import HotelOrderTable from '../components/HotelOrderTable'
 import QuoteRequests from '../components/QuoteRequests'
 import { downloadHotelOrderTemplate, parseHotelOrderTemplate } from '../lib/excelTemplates'
 
@@ -43,7 +43,7 @@ export default function HotelDashboard({ hotel }) {
     if (!hotel?.id) return
     const { data } = await supabase
       .from('orders')
-      .select('*, order_items(*, products(*)), suppliers(name, apmc_yard), hotels(name, address)')
+      .select('*, order_items(*, products(*)), suppliers(name, apmc_yard), hotels(name, address), deliveries(*)')
       .eq('hotel_id', hotel.id)
       .order('created_at', { ascending: false })
     setOrders(data || [])
@@ -252,7 +252,7 @@ export default function HotelDashboard({ hotel }) {
         </div>
       )}
 
-      {tab === 'orders' && <OrderList orders={orders} viewerRole="hotel" onChanged={loadOrders} />}
+      {tab === 'orders' && <HotelOrderTable orders={orders} onChanged={loadOrders} />}
 
       {tab === 'bidding' && (
         <QuoteRequests hotel={hotel} products={allProducts} onOrderPlaced={loadOrders} />

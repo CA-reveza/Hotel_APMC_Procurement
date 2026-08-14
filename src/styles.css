@@ -105,6 +105,8 @@ select {
 .btn-ghost { background: transparent; color: white; border: 1px solid rgba(255,255,255,0.4); }
 .btn-ghost-dark { background: transparent; color: var(--primary); border: 1px solid var(--primary); }
 .btn-link { background: none; border: none; color: var(--primary); cursor: pointer; font-size: 0.82rem; padding: 0; margin-top: 0; text-decoration: underline; }
+.order-detail-cell { background: var(--bg); padding: 14px !important; }
+.order-detail-cell .card { margin-bottom: 0; box-shadow: none; border: 1px solid var(--border); }
 .btn:disabled { opacity: 0.6; cursor: default; }
 
 .order-card-badges { display: flex; gap: 6px; margin: 6px 0; }
@@ -205,3 +207,19 @@ select {
 .stock-toggle.out-of-stock { background: #fde8e6; color: var(--danger); }
 
 .row-disabled { opacity: 0.55; }
+.delivery-actions-inline { display: flex; gap: 12px; }
+
+.delivery-badge {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.delivery-muted { background: #eef0f3; color: var(--muted); }
+.delivery-requested { background: #fff4d6; color: #8a6100; }
+.delivery-assigned { background: #dbeafe; color: #1e40af; }
+.delivery-picked-up { background: #ede9fe; color: #5b21b6; }
+.delivery-in-transit { background: #fde7cd; color: #9a4d00; }
+.delivery-delivered { background: #dcf5e3; color: #1c6e4a; }
+.delivery-cancelled { background: #fde8e6; color: var(--danger); }

@@ -45,8 +45,8 @@ export default function Login() {
   return (
     <div className="center-screen">
       <div className="auth-card">
-        <h1>Hotel–APMC Procurement</h1>
-        <p className="subtitle">Bengaluru B2B procurement platform</p>
+        <h1>OrderIt</h1>
+        <p className="subtitle">Bengaluru B2B procurement platform for hotels & APMC suppliers</p>
 
         <div className="tabs">
           <button className={mode === 'signin' ? 'tab active' : 'tab'} onClick={() => setMode('signin')}>Sign in</button>
@@ -72,6 +72,7 @@ export default function Login() {
             <select value={role} onChange={(e) => setRole(e.target.value)}>
               <option value="hotel">Hotel / Restaurant / Cloud Kitchen</option>
               <option value="supplier">APMC / Wholesale Supplier</option>
+              <option value="driver">Delivery Partner / Driver</option>
             </select>
             <label>Full name / business contact</label>
             <input value={fullName} onChange={(e) => setFullName(e.target.value)} required />

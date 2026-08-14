@@ -1,4 +1,4 @@
-# Hotel ⇄ APMC Procurement Platform (MVP)
+# OrderIt — Hotel ⇄ APMC Procurement Platform
 
 A working end-to-end B2B procurement app connecting **hotels/restaurants/cloud kitchens**
 with **APMC/wholesale suppliers**, built to match the business plan: one platform,
@@ -17,9 +17,13 @@ backend directly from the client via RLS-secured tables).
 ```
 hotel-apmc-platform/
 ├── supabase/
-│   ├── schema.sql              # core DB schema, RLS policies, triggers, seed products
-│   ├── schema_extensions.sql   # payments, delivery routing, WhatsApp, bidding — run after schema.sql
-│   └── functions/               # Edge Functions (Deno) — the only server-side code in this project
+│   ├── schema.sql                    # core DB schema, RLS policies, triggers, seed products
+│   ├── schema_extensions.sql         # payments, delivery routing, WhatsApp, bidding
+│   ├── schema_stock_flag.sql         # in-stock/out-of-stock flag on prices
+│   ├── schema_hotel_contact.sql      # hotel phone/email visible to suppliers
+│   ├── schema_multi_item_quotes.sql  # multi-item Request for Quote
+│   ├── schema_vehicle_delivery.sql   # driver role + vehicle-booking delivery
+│   └── functions/                     # Edge Functions (Deno) — the only server-side code in this project
 │       ├── create-razorpay-order/
 │       ├── verify-razorpay-payment/
 │       ├── whatsapp-webhook/
@@ -27,21 +31,26 @@ hotel-apmc-platform/
 ├── src/
 │   ├── supabaseClient.js   # Supabase client (reads VITE_SUPABASE_URL / ANON_KEY)
 │   ├── lib/
-│   │   ├── useAuth.js      # session + profile + hotel/supplier record hook
-│   │   └── invoice.js      # client-side PDF invoice generation (jsPDF)
-│   ├── App.jsx             # role-based router (hotel / supplier / admin)
+│   │   ├── useAuth.js        # session + profile + hotel/supplier/driver record hook
+│   │   ├── invoice.js        # client-side PDF invoice generation (jsPDF)
+│   │   ├── excelTemplates.js # bulk price/order Excel download+upload (SheetJS)
+│   │   └── vehiclePricing.js # vehicle catalog + fare estimator (ported from motor app)
+│   ├── App.jsx             # role-based router (hotel / supplier / driver / admin)
 │   ├── pages/
 │   │   ├── Login.jsx           # sign in / sign up (role selection)
-│   │   ├── SetupOrg.jsx        # first-time hotel/supplier business details
+│   │   ├── SetupOrg.jsx        # first-time hotel/supplier/driver setup details
 │   │   ├── HotelDashboard.jsx  # browse prices, cart, place orders, request quotes, order history
 │   │   ├── SupplierDashboard.jsx # publish daily prices, accept/progress orders, respond to quote requests
-│   │   └── AdminDashboard.jsx  # GMV, commission, all hotels/suppliers/orders/deliveries
+│   │   ├── DriverDashboard.jsx # accept open delivery requests, progress assigned ones
+│   │   └── AdminDashboard.jsx  # GMV, commission, all hotels/suppliers/drivers/orders/deliveries
 │   └── components/
 │       ├── Navbar.jsx, OrderList.jsx, OrderCard.jsx
-│       ├── PaymentButton.jsx   # Razorpay Checkout trigger
-│       ├── DeliveryPanel.jsx   # direct / consolidation-hub delivery tracking on each order
-│       ├── QuoteRequests.jsx   # hotel side of supplier bidding
-│       └── OpenRequests.jsx    # supplier side of supplier bidding
+│       ├── HotelOrderTable.jsx    # compact My Orders list, expand for full detail
+│       ├── SupplierOrderTable.jsx # compact Incoming Orders list, expand for full detail
+│       ├── PaymentButton.jsx      # Razorpay Checkout trigger
+│       ├── DeliveryPanel.jsx      # manual partner entry, or book a vehicle from the driver pool
+│       ├── QuoteRequests.jsx      # hotel side of multi-item supplier bidding
+│       └── OpenRequests.jsx       # supplier side of multi-item supplier bidding
 ├── package.json
 ├── vite.config.js
 └── .env.example
@@ -108,8 +117,21 @@ the components listed above):
 4. Go to **Project Settings → API** and copy:
    - `Project URL` → `VITE_SUPABASE_URL`
    - `anon public` key → `VITE_SUPABASE_ANON_KEY`
-5. Back in **SQL Editor**, run `supabase/schema_extensions.sql` too (adds
-   payments, deliveries, WhatsApp support column, and quote requests/bidding).
+5. Back in **SQL Editor**, run these migrations in order (all idempotent —
+   safe to re-run):
+   - `supabase/schema_extensions.sql` — payments, delivery routing, WhatsApp
+     support column, quote requests/bidding
+   - `supabase/schema_stock_flag.sql` — in-stock/out-of-stock flag on prices
+   - `supabase/schema_hotel_contact.sql` — hotel phone/email visible to suppliers
+   - `supabase/schema_multi_item_quotes.sql` — multi-item Request for Quote
+   - `supabase/schema_vehicle_delivery.sql` — driver role + vehicle-booking
+     delivery system
+   - `supabase/schema_fix_rls_recursion.sql` — fixes an RLS bug from the
+     driver migration (infinite recursion between orders/deliveries policies)
+   - `supabase/schema_motor_bridge_orderit.sql` — tracking columns for
+     deliveries bridged out to the separate MOTOR app
+   - `supabase/RUN_ON_MOTOR_PROJECT_bridge.sql` — ⚠️ run this one on **MOTOR's**
+     Supabase project instead, not OrderIt's (see section 2a below)
 
 ### 2a. Set up the extra features (optional — skip any you don't need yet)
 
@@ -155,8 +177,38 @@ the components listed above):
    them from that supplier's latest `supplier_prices`, creates the order, and
    replies with a confirmation + total.
 
+**Vehicle delivery / drivers** — sign up a new account with role **Delivery
+Partner / Driver**, pick a vehicle type and enter a vehicle number. On any
+order, a supplier or admin can click **Book a vehicle** in the delivery panel,
+choose a vehicle type and distance, and it posts to the open pool for any
+driver to accept from their own dashboard (`Available` tab), then progress
+through picked up → in transit → delivered.
+
+**MOTOR integration** (bridges a delivery to your separate `motor` app, so it
+shows up in MOTOR's own driver console) — MOTOR is a completely different
+Supabase project with its own auth, so this works by having an OrderIt Edge
+Function insert directly into MOTOR's `bookings` table with MOTOR's
+service-role key, bypassing the fact that OrderIt users have no MOTOR login.
+1. On the **MOTOR** project's Supabase (not OrderIt's!), run
+   `supabase/RUN_ON_MOTOR_PROJECT_bridge.sql` in its SQL Editor.
+2. Get MOTOR's service-role key from **that** project's
+   Project Settings → API → `service_role` (secret) key.
+3. On the **OrderIt** project, set the bridge secrets and deploy the function:
+   ```bash
+   supabase secrets set MOTOR_SUPABASE_URL=https://YOUR-MOTOR-REF.supabase.co MOTOR_SERVICE_ROLE_KEY=xxx
+   supabase functions deploy book-motor-delivery
+   ```
+4. (Optional, for live status in the OrderIt UI) add MOTOR's own **URL** and
+   **anon key** to OrderIt's `.env` as `VITE_MOTOR_SUPABASE_URL` /
+   `VITE_MOTOR_SUPABASE_ANON_KEY` — see `.env.example`. Without this, OrderIt
+   still books the delivery correctly, it just won't live-update the status
+   pill until the order is reloaded.
+5. On any order's delivery panel, click **Book via MOTOR** instead of
+   **Book in-house vehicle** — the job appears in MOTOR's driver console
+   exactly like any other pending booking.
+
 **Delivery routing, invoices, and supplier bidding** need no extra setup
-beyond `schema_extensions.sql` — they work as soon as you run it.
+beyond the migrations above — they work as soon as you run them.
 
 ---
 

@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import HotelDashboard from './pages/HotelDashboard'
 import SupplierDashboard from './pages/SupplierDashboard'
 import AdminDashboard from './pages/AdminDashboard'
+import DriverDashboard from './pages/DriverDashboard'
 import SetupOrg from './pages/SetupOrg'
 
 export default function App() {
@@ -22,9 +23,10 @@ export default function App() {
     return <div className="center-screen">Setting up your account…</div>
   }
 
-  // Hotel/supplier accounts need their org record (hotels/suppliers row) created
-  // once, right after first sign-up, before they can use the dashboard.
-  const needsOrgSetup = (profile.role === 'hotel' || profile.role === 'supplier') && !orgRecord
+  // Hotel/supplier/driver accounts need their org record (hotels/suppliers/
+  // drivers row) created once, right after first sign-up, before they can
+  // use the dashboard.
+  const needsOrgSetup = ['hotel', 'supplier', 'driver'].includes(profile.role) && !orgRecord
 
   return (
     <div className="app-shell">
@@ -43,6 +45,12 @@ export default function App() {
             {profile.role === 'supplier' && (
               <>
                 <Route path="/" element={<SupplierDashboard profile={profile} supplier={orgRecord} />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </>
+            )}
+            {profile.role === 'driver' && (
+              <>
+                <Route path="/" element={<DriverDashboard profile={profile} driver={orgRecord} />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </>
             )}

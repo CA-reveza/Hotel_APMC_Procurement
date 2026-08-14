@@ -25,7 +25,7 @@ export default function PaymentButton({ order, onPaid }) {
         amount: data.amount,
         currency: data.currency,
         order_id: data.razorpay_order_id,
-        name: 'Hotel–APMC Procurement',
+        name: 'OrderIt',
         description: `Order #${order.id.slice(0, 8)}`,
         handler: async (response) => {
           const { data: verifyData, error: verifyError } = await supabase.functions.invoke('verify-razorpay-payment', {

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../supabaseClient'
-import OrderList from '../components/OrderList'
+import SupplierOrderTable from '../components/SupplierOrderTable'
 import OpenRequests from '../components/OpenRequests'
 import { downloadSupplierPriceTemplate, parseSupplierPriceTemplate } from '../lib/excelTemplates'
 
@@ -35,7 +35,7 @@ export default function SupplierDashboard({ supplier }) {
     if (!supplier?.id) return
     const { data } = await supabase
       .from('orders')
-      .select('*, order_items(*, products(*)), hotels(name, address), suppliers(name, apmc_yard)')
+      .select('*, order_items(*, products(*)), hotels(name, address, phone, email), suppliers(name, apmc_yard), deliveries(*)')
       .eq('supplier_id', supplier.id)
       .order('created_at', { ascending: false })
     setOrders(data || [])
@@ -126,7 +126,7 @@ export default function SupplierDashboard({ supplier }) {
         <button className={tab === 'bidding' ? 'tab active' : 'tab'} onClick={() => setTab('bidding')}>Open requests</button>
       </div>
 
-      {tab === 'orders' && <OrderList orders={orders} viewerRole="supplier" onChanged={loadOrders} />}
+      {tab === 'orders' && <SupplierOrderTable orders={orders} onChanged={loadOrders} />}
 
       {tab === 'bidding' && <OpenRequests supplier={supplier} />}
 
