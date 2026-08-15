@@ -37,28 +37,6 @@ export default function DeliveryPanel({ orderId, viewerRole }) {
     if (!error) { setEditing(false); load() }
   }
 
-  const requestInternalVehicle = async () => {
-    const km = parseFloat(distanceKm)
-    if (!km || km <= 0) return
-    setBusy(true)
-    const fare = estimateFare(vehicleType, km)
-    const { error } = await supabase.from('deliveries').upsert(
-      {
-        order_id: orderId,
-        delivery_type: form.delivery_type || 'direct',
-        fulfilled_via: 'internal',
-        vehicle_type: vehicleType,
-        distance_km: km,
-        fare_estimate: fare,
-        requested_at: new Date().toISOString(),
-        driver_id: null
-      },
-      { onConflict: 'order_id' }
-    )
-    setBusy(false)
-    if (!error) { setBookingMode(null); load() }
-  }
-
   const requestMotorVehicle = async () => {
     const km = parseFloat(distanceKm)
     if (!km || km <= 0) return
@@ -109,10 +87,7 @@ export default function DeliveryPanel({ orderId, viewerRole }) {
                 {delivery?.partner_name ? 'Edit partner' : 'Set partner manually'}
               </button>
               {!delivery?.vehicle_type && (
-                <>
-                  <button className="btn-link" onClick={() => setBookingMode('internal')}>Book in-house vehicle</button>
-                  <button className="btn-link" onClick={() => setBookingMode('motor')}>Book via MOTOR</button>
-                </>
+                <button className="btn-link" onClick={() => setBookingMode('motor')}>Book via MOTOR</button>
               )}
             </span>
           )}
@@ -139,7 +114,7 @@ export default function DeliveryPanel({ orderId, viewerRole }) {
 
       {bookingMode && (
         <div className="delivery-form">
-          <div className="muted small">{bookingMode === 'motor' ? 'Booking via MOTOR' : 'Booking an in-house vehicle'}</div>
+          <div className="muted small">Booking via MOTOR</div>
           <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)}>
             {VEHICLE_TYPES.map((v) => (
               <option key={v.id} value={v.id}>{v.label} — {v.desc} (up to {v.capacityKg}kg)</option>
@@ -154,12 +129,8 @@ export default function DeliveryPanel({ orderId, viewerRole }) {
           )}
           {error && <div className="alert alert-error">{error}</div>}
           <div className="delivery-form-actions">
-            <button
-              className="btn btn-primary"
-              disabled={busy || !distanceKm}
-              onClick={bookingMode === 'motor' ? requestMotorVehicle : requestInternalVehicle}
-            >
-              {busy ? 'Requesting…' : bookingMode === 'motor' ? 'Book via MOTOR' : 'Request vehicle'}
+            <button className="btn btn-primary" disabled={busy || !distanceKm} onClick={requestMotorVehicle}>
+              {busy ? 'Requesting…' : 'Book via MOTOR'}
             </button>
             <button className="btn-link" onClick={() => { setBookingMode(null); setError('') }}>Cancel</button>
           </div>

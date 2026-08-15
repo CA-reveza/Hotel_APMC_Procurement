@@ -3,12 +3,14 @@ import { supabase } from '../supabaseClient'
 import HotelOrderTable from '../components/HotelOrderTable'
 import QuoteRequests from '../components/QuoteRequests'
 import { downloadHotelOrderTemplate, parseHotelOrderTemplate } from '../lib/excelTemplates'
+import { CATEGORY_TILES, categoryTileFor } from '../lib/categoryTiles'
 
 export default function HotelDashboard({ hotel }) {
   const [tab, setTab] = useState('order') // 'order' | 'orders' | 'bidding'
   const [suppliers, setSuppliers] = useState([])
   const [supplierId, setSupplierId] = useState('')
   const [priceRows, setPriceRows] = useState([]) // supplier_prices joined with products
+  const [categoryFilter, setCategoryFilter] = useState('All')
   const [cart, setCart] = useState({}) // product_id -> qty
   const [orders, setOrders] = useState([])
   const [allProducts, setAllProducts] = useState([])
@@ -68,6 +70,18 @@ export default function HotelDashboard({ hotel }) {
         { event: '*', schema: 'public', table: 'orders', filter: `hotel_id=eq.${hotel.id}` },
         () => loadOrders()
       )
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [hotel, loadOrders])
+
+  // Realtime: deliveries has no hotel_id to filter on, so just refresh on any
+  // change — this is what makes a MOTOR driver's status update (pushed via
+  // the motor-status-webhook Edge Function) show up live without a reload.
+  useEffect(() => {
+    if (!hotel?.id) return
+    const channel = supabase
+      .channel(`hotel-deliveries-${hotel.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, () => loadOrders())
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [hotel, loadOrders])
@@ -174,6 +188,19 @@ export default function HotelDashboard({ hotel }) {
               ))}
             </select>
 
+            <div className="category-tiles">
+              {['All', ...CATEGORY_TILES].map((tile) => (
+                <button
+                  key={tile}
+                  type="button"
+                  className={`category-tile ${categoryFilter === tile ? 'active' : ''}`}
+                  onClick={() => setCategoryFilter(tile)}
+                >
+                  {tile}
+                </button>
+              ))}
+            </div>
+
             {priceRows.length > 0 && (
               <div className="bulk-bar">
                 <button className="btn btn-ghost-dark" onClick={handleDownloadOrderTemplate}>⬇ Download order sheet (.xlsx)</button>
@@ -197,8 +224,11 @@ export default function HotelDashboard({ hotel }) {
                 <tr><th>Product</th><th>Price</th><th>Grade</th><th>Stock</th><th>Qty</th></tr>
               </thead>
               <tbody>
-                {priceRows.map((row) => {
+                {priceRows
+                  .filter((row) => categoryFilter === 'All' || categoryTileFor(row.products?.category) === categoryFilter)
+                  .map((row) => {
                   const outOfStock = row.in_stock === false
+                  const isLowStock = !outOfStock && row.available_qty > 0 && row.available_qty <= (row.low_stock_threshold || 5)
                   return (
                     <tr key={row.id} className={outOfStock ? 'row-disabled' : ''}>
                       <td>{row.products?.name}</td>
@@ -208,6 +238,11 @@ export default function HotelDashboard({ hotel }) {
                         <span className={`stock-badge ${outOfStock ? 'out-of-stock' : 'in-stock'}`}>
                           {outOfStock ? 'Out of stock' : 'In stock'}
                         </span>
+                        {isLowStock && (
+                          <div className="delivery-badge delivery-requested" style={{ marginTop: 4 }}>
+                            Only {row.available_qty} {row.products?.unit} left
+                          </div>
+                        )}
                       </td>
                       <td>
                         <input

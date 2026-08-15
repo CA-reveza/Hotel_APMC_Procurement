@@ -57,7 +57,18 @@ export default function SupplierDashboard({ supplier }) {
     return () => supabase.removeChannel(channel)
   }, [supplier, loadOrders])
 
-  const savePrice = async (productId, price, grade, availableQty, inStock) => {
+  // deliveries has no supplier_id to filter on, so refresh on any change —
+  // this is what surfaces a MOTOR driver accepting/progressing a booking.
+  useEffect(() => {
+    if (!supplier?.id) return
+    const channel = supabase
+      .channel(`supplier-deliveries-${supplier.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, () => loadOrders())
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [supplier, loadOrders])
+
+  const savePrice = async (productId, price, grade, availableQty, inStock, lowStockThreshold) => {
     if (!price || price <= 0) return
     setSaving(productId)
     const today = new Date().toISOString().slice(0, 10)
@@ -71,6 +82,7 @@ export default function SupplierDashboard({ supplier }) {
           grade,
           available_qty: availableQty || 0,
           in_stock: inStock,
+          low_stock_threshold: lowStockThreshold || 5,
           price_date: today
         },
         { onConflict: 'supplier_id,product_id,price_date' }
@@ -152,7 +164,7 @@ export default function SupplierDashboard({ supplier }) {
 
           <table className="table">
             <thead>
-              <tr><th>Product</th><th>Price (₹)</th><th>Grade</th><th>Stock</th><th>Available qty</th><th></th></tr>
+              <tr><th>Product</th><th>Price (₹)</th><th>Grade</th><th>Stock</th><th>Available qty</th><th>Low-stock alert at</th><th></th></tr>
             </thead>
             <tbody>
               {products.map((p) => {
@@ -180,13 +192,17 @@ function PriceRow({ product, existing, saving, onSave }) {
   const [grade, setGrade] = useState(existing?.grade ?? 'A')
   const [qty, setQty] = useState(existing?.available_qty ?? '')
   const [inStock, setInStock] = useState(existing?.in_stock ?? true)
+  const [threshold, setThreshold] = useState(existing?.low_stock_threshold ?? 5)
 
   useEffect(() => {
     setPrice(existing?.price ?? '')
     setGrade(existing?.grade ?? 'A')
     setQty(existing?.available_qty ?? '')
     setInStock(existing?.in_stock ?? true)
+    setThreshold(existing?.low_stock_threshold ?? 5)
   }, [existing])
+
+  const isLowStock = inStock && qty !== '' && Number(qty) > 0 && Number(qty) <= Number(threshold || 5)
 
   return (
     <tr>
@@ -206,10 +222,12 @@ function PriceRow({ product, existing, saving, onSave }) {
         >
           {inStock ? 'In stock' : 'Out of stock'}
         </button>
+        {isLowStock && <div className="delivery-badge delivery-requested" style={{ marginTop: 4 }}>Low stock</div>}
       </td>
       <td><input type="number" min="0" className="qty-input" value={qty} onChange={(e) => setQty(e.target.value)} /></td>
+      <td><input type="number" min="0" className="qty-input" value={threshold} onChange={(e) => setThreshold(e.target.value)} /></td>
       <td>
-        <button className="btn btn-primary" disabled={saving} onClick={() => onSave(product.id, parseFloat(price), grade, parseFloat(qty), inStock)}>
+        <button className="btn btn-primary" disabled={saving} onClick={() => onSave(product.id, parseFloat(price), grade, parseFloat(qty), inStock, parseFloat(threshold))}>
           {saving ? 'Saving…' : existing ? 'Update' : 'Publish'}
         </button>
       </td>

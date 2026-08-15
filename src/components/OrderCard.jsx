@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../supabaseClient'
 import PaymentButton from './PaymentButton'
 import DeliveryPanel from './DeliveryPanel'
+import OrderTrackingStepper from './OrderTrackingStepper'
 import { downloadInvoice } from '../lib/invoice'
 
 const STATUS_FLOW = {
@@ -26,6 +27,7 @@ const STATUS_LABEL = {
 
 export default function OrderCard({ order, viewerRole, onChanged }) {
   const [busy, setBusy] = useState(false)
+  const delivery = Array.isArray(order.deliveries) ? order.deliveries[0] : order.deliveries
 
   const updateStatus = async (status) => {
     setBusy(true)
@@ -46,10 +48,9 @@ export default function OrderCard({ order, viewerRole, onChanged }) {
         <span className={`status-badge status-${order.status}`}>{STATUS_LABEL[order.status]}</span>
       </div>
 
+      <OrderTrackingStepper order={order} delivery={delivery} />
+
       <div className="order-card-badges">
-        <span className={`pay-badge pay-${order.payment_status || 'unpaid'}`}>
-          {order.payment_status === 'paid' ? '✓ Paid' : 'Payment pending'}
-        </span>
         {order.source === 'whatsapp' && <span className="pay-badge pay-whatsapp">via WhatsApp</span>}
       </div>
 

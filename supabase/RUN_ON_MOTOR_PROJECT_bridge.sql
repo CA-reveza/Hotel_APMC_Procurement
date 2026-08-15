@@ -27,3 +27,25 @@ create policy "Public can read orderit-sourced bookings" on bookings
 -- the service-role key from its Edge Function, which bypasses RLS by design.
 -- MOTOR drivers already see them through the existing "Drivers can read
 -- pending bookings" policy (status = 'pending', no customer_id check).
+
+-- ============================================================================
+-- After running the SQL above, also set up the status webhook (this is a
+-- dashboard step, not SQL — no further code to run here):
+--
+-- MOTOR project → Database → Webhooks → Create a new webhook
+--   Name:    orderit-status-sync
+--   Table:   bookings
+--   Events:  Update
+--   Type:    HTTP Request
+--   Method:  POST
+--   URL:     <OrderIt's motor-status-webhook Edge Function URL>
+--            (find it under OrderIt's project → Edge Functions →
+--            motor-status-webhook, after deploying it)
+--   HTTP Headers: add one —
+--     x-webhook-secret: <same value you set as MOTOR_WEBHOOK_SECRET
+--                         on the OrderIt project>
+--
+-- This is what makes "driver accepted in MOTOR" show up live in OrderIt's
+-- Hotel and Supplier order lists, not just when someone happens to have that
+-- specific order's delivery panel open.
+-- ============================================================================

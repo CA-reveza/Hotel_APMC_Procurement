@@ -132,6 +132,8 @@ the components listed above):
      deliveries bridged out to the separate MOTOR app
    - `supabase/RUN_ON_MOTOR_PROJECT_bridge.sql` — ⚠️ run this one on **MOTOR's**
      Supabase project instead, not OrderIt's (see section 2a below)
+   - `supabase/schema_stock_and_motor_webhook.sql` — stock deduction on
+     packing, low-stock threshold, MOTOR webhook support
 
 ### 2a. Set up the extra features (optional — skip any you don't need yet)
 
@@ -177,35 +179,41 @@ the components listed above):
    them from that supplier's latest `supplier_prices`, creates the order, and
    replies with a confirmation + total.
 
-**Vehicle delivery / drivers** — sign up a new account with role **Delivery
-Partner / Driver**, pick a vehicle type and enter a vehicle number. On any
-order, a supplier or admin can click **Book a vehicle** in the delivery panel,
-choose a vehicle type and distance, and it posts to the open pool for any
-driver to accept from their own dashboard (`Available` tab), then progress
-through picked up → in transit → delivered.
+**Vehicle delivery** — MOTOR is now the sole delivery-booking system (no more
+in-house driver signup in OrderIt — see below). On any order, a supplier or
+admin clicks **Book via MOTOR** in the delivery panel, picks a vehicle type
+and distance, and it's created as a real booking in MOTOR's own database.
 
 **MOTOR integration** (bridges a delivery to your separate `motor` app, so it
 shows up in MOTOR's own driver console) — MOTOR is a completely different
 Supabase project with its own auth, so this works by having an OrderIt Edge
 Function insert directly into MOTOR's `bookings` table with MOTOR's
 service-role key, bypassing the fact that OrderIt users have no MOTOR login.
+Status flows back the same way in reverse, via a webhook.
 1. On the **MOTOR** project's Supabase (not OrderIt's!), run
-   `supabase/RUN_ON_MOTOR_PROJECT_bridge.sql` in its SQL Editor.
+   `supabase/RUN_ON_MOTOR_PROJECT_bridge.sql` in its SQL Editor. This also
+   documents the dashboard step for the status webhook — see the bottom of
+   that file.
 2. Get MOTOR's service-role key from **that** project's
    Project Settings → API → `service_role` (secret) key.
-3. On the **OrderIt** project, set the bridge secrets and deploy the function:
+3. On the **OrderIt** project, set the bridge secrets and deploy the functions:
    ```bash
-   supabase secrets set MOTOR_SUPABASE_URL=https://YOUR-MOTOR-REF.supabase.co MOTOR_SERVICE_ROLE_KEY=xxx
+   supabase secrets set MOTOR_SUPABASE_URL=https://YOUR-MOTOR-REF.supabase.co MOTOR_SERVICE_ROLE_KEY=xxx MOTOR_WEBHOOK_SECRET=some-long-random-string
    supabase functions deploy book-motor-delivery
+   supabase functions deploy motor-status-webhook --no-verify-jwt
    ```
-4. (Optional, for live status in the OrderIt UI) add MOTOR's own **URL** and
-   **anon key** to OrderIt's `.env` as `VITE_MOTOR_SUPABASE_URL` /
-   `VITE_MOTOR_SUPABASE_ANON_KEY` — see `.env.example`. Without this, OrderIt
-   still books the delivery correctly, it just won't live-update the status
-   pill until the order is reloaded.
-5. On any order's delivery panel, click **Book via MOTOR** instead of
-   **Book in-house vehicle** — the job appears in MOTOR's driver console
-   exactly like any other pending booking.
+4. On the **MOTOR** project's dashboard, set up **Database → Webhooks** →
+   table `bookings`, event `Update`, HTTP Request to the
+   `motor-status-webhook` function's URL, with header
+   `x-webhook-secret: <same value as MOTOR_WEBHOOK_SECRET>`. This is what
+   makes "driver accepted" show up live in both the Hotel and Supplier order
+   lists — not just wherever the delivery panel happens to be open.
+5. (Optional, for the delivery-panel's own live status pill too) add MOTOR's
+   **URL** and **anon key** to OrderIt's `.env` as `VITE_MOTOR_SUPABASE_URL` /
+   `VITE_MOTOR_SUPABASE_ANON_KEY` — see `.env.example`.
+6. On any order's delivery panel, click **Book via MOTOR** — the job appears
+   in MOTOR's driver console exactly like any other pending booking, and any
+   status change flows back automatically.
 
 **Delivery routing, invoices, and supplier bidding** need no extra setup
 beyond the migrations above — they work as soon as you run them.
@@ -310,5 +318,21 @@ npm run build   # outputs to dist/
   be spoofed from the browser. If you ever see payment rows not updating,
   check the Edge Function logs (`supabase functions logs verify-razorpay-payment`)
   first.
+- Stock is deducted once, when a supplier marks an order **packed** (against
+  that supplier's latest price row for each product) — not at "accepted" or
+  "delivered". If you'd rather it happen at a different stage, that's one
+  trigger to move in `schema_stock_and_motor_webhook.sql`.
+- Driver sign-up is removed from the sign-up screen now that MOTOR handles
+  all delivery drivers, but the old in-house driver role/dashboard/table are
+  still in the codebase (unreachable from sign-up, harmless) rather than
+  deleted, so any driver test accounts you already created still work.
+- The redesign doc (`Hotel_APMC_MOTAR_Plan.docx`) describes a much bigger
+  product — two separate mobile apps, wallets, subscriptions, live map
+  tracking, surge pricing. What's built here is a slice of it inside the
+  existing single-page web app: the 4 category tiles on the hotel ordering
+  screen, and a Confirmed→Accepted→Packed→Out for delivery→Delivered tracking
+  stepper (with a Paid/Payment pending badge alongside, and "In MOTOR" shown
+  in place of "Out for delivery" when that's how it's being fulfilled). Point
+  me at any other specific screen from the doc you want built next.
 - No automated tests included — given the size of this project, manual
   testing via the flow in section 3 is the fastest way to verify changes.

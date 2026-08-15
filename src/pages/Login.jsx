@@ -72,7 +72,6 @@ export default function Login() {
             <select value={role} onChange={(e) => setRole(e.target.value)}>
               <option value="hotel">Hotel / Restaurant / Cloud Kitchen</option>
               <option value="supplier">APMC / Wholesale Supplier</option>
-              <option value="driver">Delivery Partner / Driver</option>
             </select>
             <label>Full name / business contact</label>
             <input value={fullName} onChange={(e) => setFullName(e.target.value)} required />

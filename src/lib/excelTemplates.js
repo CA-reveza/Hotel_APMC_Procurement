@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx'
 // bulk-upsert supplier_prices in one go.
 // ----------------------------------------------------------------------------
 
-const SUPPLIER_HEADERS = ['Product', 'Unit', 'Price (Rs)', 'Grade (A/B)', 'In Stock (Yes/No)', 'Available Qty']
+const SUPPLIER_HEADERS = ['Product', 'Unit', 'Price (Rs)', 'Grade (A/B)', 'In Stock (Yes/No)', 'Available Qty', 'Low Stock Alert At']
 
 export function downloadSupplierPriceTemplate(products, myPrices, supplierName) {
   const rows = products.map((p) => {
@@ -17,11 +17,12 @@ export function downloadSupplierPriceTemplate(products, myPrices, supplierName) 
       [SUPPLIER_HEADERS[2]]: existing?.price ?? '',
       [SUPPLIER_HEADERS[3]]: existing?.grade ?? 'A',
       [SUPPLIER_HEADERS[4]]: existing ? (existing.in_stock === false ? 'No' : 'Yes') : 'Yes',
-      [SUPPLIER_HEADERS[5]]: existing?.available_qty ?? ''
+      [SUPPLIER_HEADERS[5]]: existing?.available_qty ?? '',
+      [SUPPLIER_HEADERS[6]]: existing?.low_stock_threshold ?? 5
     }
   })
   const sheet = XLSX.utils.json_to_sheet(rows, { header: SUPPLIER_HEADERS })
-  sheet['!cols'] = [{ wch: 26 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 14 }]
+  sheet['!cols'] = [{ wch: 26 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 16 }]
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, sheet, 'Prices')
   const fileName = `price-list-${(supplierName || 'supplier').replace(/\s+/g, '-').toLowerCase()}.xlsx`
@@ -58,8 +59,9 @@ export async function parseSupplierPriceTemplate(file, products) {
     const inStockRaw = String(row[SUPPLIER_HEADERS[4]] ?? 'Yes').trim().toLowerCase()
     const inStock = !(inStockRaw === 'no' || inStockRaw === 'n' || inStockRaw === 'false' || inStockRaw === '0')
     const qty = parseFloat(row[SUPPLIER_HEADERS[5]]) || 0
+    const lowStockThreshold = parseFloat(row[SUPPLIER_HEADERS[6]]) || 5
 
-    rows.push({ product_id: product.id, price, grade, in_stock: inStock, available_qty: qty })
+    rows.push({ product_id: product.id, price, grade, in_stock: inStock, available_qty: qty, low_stock_threshold: lowStockThreshold })
   }
 
   return { rows, unmatched }
