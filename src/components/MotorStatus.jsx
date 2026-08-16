@@ -47,7 +47,7 @@ export default function MotorStatus({ orderId, motorBookingId, fallbackStatus })
 
   return (
     <span className="muted small">
-      🏍️ MOTOR: {MOTOR_STATUS_LABEL[status] || status || 'Booked'}
+      🏍️ MoveIT: {MOTOR_STATUS_LABEL[status] || status || 'Booked'}
       {!motorSupabase && ' (live tracking not configured — see README)'}
     </span>
   )
