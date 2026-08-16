@@ -237,6 +237,9 @@ select {
 .category-tile.active { background: var(--primary); border-color: var(--primary); color: white; font-weight: 600; }
 .category-tile:hover:not(.active) { border-color: var(--primary); }
 
+.report-toolbar { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 16px; flex-wrap: wrap; gap: 10px; }
+.report-toolbar select { padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.85rem; background: white; }
+
 .tracking-stepper { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 12px 0 16px; flex-wrap: wrap; }
 .tracking-steps { display: flex; align-items: flex-start; flex: 1; min-width: 260px; }
 .tracking-step { display: flex; flex-direction: column; align-items: center; position: relative; flex: 1; }

@@ -5,8 +5,7 @@
 // the browser. Deploy with:
 //   supabase functions deploy create-razorpay-order
 // Secrets required (set once):
-//   supabase secrets set RAZORPAY_KEY_ID=rzp_test_xxx 
-//   supabase secrets set RAZORPAY_KEY_SECRET=xxx
+//   supabase secrets set RAZORPAY_KEY_ID=rzp_test_xxx RAZORPAY_KEY_SECRET=xxx
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 import { corsHeaders } from '../_shared/cors.ts'
 

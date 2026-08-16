@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../supabaseClient'
 import SupplierOrderTable from '../components/SupplierOrderTable'
+import SupplierRevenueReport from '../components/SupplierRevenueReport'
 import OpenRequests from '../components/OpenRequests'
 import { downloadSupplierPriceTemplate, parseSupplierPriceTemplate } from '../lib/excelTemplates'
 
@@ -136,9 +137,12 @@ export default function SupplierDashboard({ supplier }) {
         <button className={tab === 'orders' ? 'tab active' : 'tab'} onClick={() => setTab('orders')}>Incoming orders ({orders.length})</button>
         <button className={tab === 'prices' ? 'tab active' : 'tab'} onClick={() => setTab('prices')}>Today's prices</button>
         <button className={tab === 'bidding' ? 'tab active' : 'tab'} onClick={() => setTab('bidding')}>Open requests</button>
+        <button className={tab === 'reports' ? 'tab active' : 'tab'} onClick={() => setTab('reports')}>Reports</button>
       </div>
 
       {tab === 'orders' && <SupplierOrderTable orders={orders} onChanged={loadOrders} />}
+
+      {tab === 'reports' && <SupplierRevenueReport orders={orders} />}
 
       {tab === 'bidding' && <OpenRequests supplier={supplier} />}
 

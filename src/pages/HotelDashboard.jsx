@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../supabaseClient'
 import HotelOrderTable from '../components/HotelOrderTable'
+import HotelSpendReport from '../components/HotelSpendReport'
 import QuoteRequests from '../components/QuoteRequests'
 import { downloadHotelOrderTemplate, parseHotelOrderTemplate } from '../lib/excelTemplates'
 import { CATEGORY_TILES, categoryTileFor } from '../lib/categoryTiles'
@@ -176,6 +177,7 @@ export default function HotelDashboard({ hotel }) {
         <button className={tab === 'order' ? 'tab active' : 'tab'} onClick={() => setTab('order')}>Place order</button>
         <button className={tab === 'orders' ? 'tab active' : 'tab'} onClick={() => setTab('orders')}>My orders ({orders.length})</button>
         <button className={tab === 'bidding' ? 'tab active' : 'tab'} onClick={() => setTab('bidding')}>Request quotes</button>
+        <button className={tab === 'reports' ? 'tab active' : 'tab'} onClick={() => setTab('reports')}>Reports</button>
       </div>
 
       {tab === 'order' && (
@@ -288,6 +290,8 @@ export default function HotelDashboard({ hotel }) {
       )}
 
       {tab === 'orders' && <HotelOrderTable orders={orders} onChanged={loadOrders} />}
+
+      {tab === 'reports' && <HotelSpendReport orders={orders} />}
 
       {tab === 'bidding' && (
         <QuoteRequests hotel={hotel} products={allProducts} onOrderPlaced={loadOrders} />

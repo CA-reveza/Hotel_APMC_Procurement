@@ -23,30 +23,43 @@ hotel-apmc-platform/
 │   ├── schema_hotel_contact.sql      # hotel phone/email visible to suppliers
 │   ├── schema_multi_item_quotes.sql  # multi-item Request for Quote
 │   ├── schema_vehicle_delivery.sql   # driver role + vehicle-booking delivery
+│   ├── schema_fix_rls_recursion.sql  # fixes an RLS bug from the driver migration
+│   ├── schema_motor_bridge_orderit.sql   # tracking columns for MOTOR-bridged deliveries
+│   ├── RUN_ON_MOTOR_PROJECT_bridge.sql   # ⚠️ run on MOTOR's Supabase, not OrderIt's
+│   ├── schema_stock_and_motor_webhook.sql # stock deduction on packing, low-stock threshold
 │   └── functions/                     # Edge Functions (Deno) — the only server-side code in this project
 │       ├── create-razorpay-order/
 │       ├── verify-razorpay-payment/
 │       ├── whatsapp-webhook/
+│       ├── book-motor-delivery/
+│       ├── motor-status-webhook/
 │       └── _shared/cors.ts
 ├── src/
 │   ├── supabaseClient.js   # Supabase client (reads VITE_SUPABASE_URL / ANON_KEY)
+│   ├── motorClient.js      # optional read-only client pointed at MOTOR's own project
 │   ├── lib/
-│   │   ├── useAuth.js        # session + profile + hotel/supplier/driver record hook
+│   │   ├── useAuth.js        # session + profile + hotel/supplier record hook
 │   │   ├── invoice.js        # client-side PDF invoice generation (jsPDF)
 │   │   ├── excelTemplates.js # bulk price/order Excel download+upload (SheetJS)
-│   │   └── vehiclePricing.js # vehicle catalog + fare estimator (ported from motor app)
-│   ├── App.jsx             # role-based router (hotel / supplier / driver / admin)
+│   │   ├── vehiclePricing.js # vehicle catalog + fare estimator (ported from motor app)
+│   │   ├── deliveryStatus.js # shared delivery-status badge logic
+│   │   ├── categoryTiles.js  # maps product categories to the 4 redesign-doc tiles
+│   │   └── reportUtils.js    # shared aggregation helpers for the Reports tabs
+│   ├── App.jsx             # role-based router (hotel / supplier / admin)
 │   ├── pages/
 │   │   ├── Login.jsx           # sign in / sign up (role selection)
-│   │   ├── SetupOrg.jsx        # first-time hotel/supplier/driver setup details
-│   │   ├── HotelDashboard.jsx  # browse prices, cart, place orders, request quotes, order history
-│   │   ├── SupplierDashboard.jsx # publish daily prices, accept/progress orders, respond to quote requests
-│   │   ├── DriverDashboard.jsx # accept open delivery requests, progress assigned ones
-│   │   └── AdminDashboard.jsx  # GMV, commission, all hotels/suppliers/drivers/orders/deliveries
+│   │   ├── SetupOrg.jsx        # first-time hotel/supplier setup details
+│   │   ├── HotelDashboard.jsx  # browse prices, cart, place orders, request quotes, order history, reports
+│   │   ├── SupplierDashboard.jsx # publish daily prices, accept/progress orders, respond to quote requests, reports
+│   │   └── AdminDashboard.jsx  # GMV, commission, all hotels/suppliers/orders/deliveries
 │   └── components/
 │       ├── Navbar.jsx, OrderList.jsx, OrderCard.jsx
 │       ├── HotelOrderTable.jsx    # compact My Orders list, expand for full detail
 │       ├── SupplierOrderTable.jsx # compact Incoming Orders list, expand for full detail
+│       ├── HotelSpendReport.jsx    # hotel Reports tab (spend, top suppliers/products, monthly trend)
+│       ├── SupplierRevenueReport.jsx # supplier Reports tab (GMV, commission, net revenue, trend)
+│       ├── OrderTrackingStepper.jsx  # visual Placed→Accepted→Packed→Out for delivery→Delivered tracker
+│       ├── MotorStatus.jsx        # live MOTOR booking status pill (optional)
 │       ├── PaymentButton.jsx      # Razorpay Checkout trigger
 │       ├── DeliveryPanel.jsx      # manual partner entry, or book a vehicle from the driver pool
 │       ├── QuoteRequests.jsx      # hotel side of multi-item supplier bidding
@@ -100,6 +113,12 @@ the components listed above):
    under **Request quotes**, it's broadcast to every supplier, each submits a
    sealed price/grade/availability quote under **Open requests**, and the
    hotel accepts the best one to instantly create a real order.
+6. **Revenue reports** — a **Reports** tab on both dashboards. Hotels see
+   total spend, order count, average order value, a spend-by-month chart, and
+   top suppliers/products. Suppliers see GMV, platform commission paid, net
+   revenue, orders fulfilled, and the same chart/breakdown pattern. Both have
+   a date-range filter (30/90/365 days/all time) and reuse each dashboard's
+   already-loaded order data, so there's no extra query cost.
 
 ---
 
@@ -297,16 +316,17 @@ npm run build   # outputs to dist/
 | Payment collection | `payments` table + Razorpay Checkout via `create-razorpay-order` / `verify-razorpay-payment` Edge Functions |
 | WhatsApp ordering (plan's Month-2 "start cheap" approach) | `whatsapp-webhook` Edge Function, orders tagged `source = 'whatsapp'` |
 | Invoices | `lib/invoice.js`, client-side PDF via jsPDF, no server round-trip |
-| Supplier bidding/comparison | `quote_requests` + `supplier_quotes` tables, `QuoteRequests.jsx` (hotel) / `OpenRequests.jsx` (supplier) |
+| Supplier bidding/comparison | `quote_requests` + `quote_request_items` + `supplier_quotes` + `supplier_quote_items` tables, `QuoteRequests.jsx` (hotel, multi-item checkboxes) / `OpenRequests.jsx` (supplier, per-item pricing) |
+| §12 Unit economics, revenue visibility | Admin **Overview** tab (platform-wide) + Hotel **Reports** tab (spend) + Supplier **Reports** tab (GMV/commission/net revenue) — all with a date-range filter and monthly trend chart |
 
 ---
 
 ## 6. Notes / known limitations
 
 - One order = one supplier per checkout (matches the plan's initial direct
-  supplier→hotel delivery model in §7). The bidding flow (§5 above) works
-  around this for single-product requirements; a true multi-supplier
-  "split cart" checkout for the consolidation-hub phase isn't built yet.
+  supplier→hotel delivery model in §7). The **Request quotes** bidding flow
+  now supports multiple items per request, but a true multi-supplier
+  "split cart" single checkout for the consolidation-hub phase isn't built.
 - WhatsApp intake matches hotels by phone number and suppliers/products by
   fuzzy name match — good enough for a pilot, but a hotel with a slightly
   misspelled supplier/product name in their text will get a "not found"
@@ -336,3 +356,13 @@ npm run build   # outputs to dist/
   me at any other specific screen from the doc you want built next.
 - No automated tests included — given the size of this project, manual
   testing via the flow in section 3 is the fastest way to verify changes.
+- If a MOTOR-bridged delivery seems stuck (never gets accepted, status never
+  updates), the fix is almost always on **MOTOR's side**, not here — see the
+  separate `motor-vehicle-assignment-fix` bundle: MOTOR's admin needs a way
+  to assign a vehicle to a driver before that driver can accept any job,
+  including ones bridged in from here.
+- The Reports tabs treat orders with status `accepted`, `packed`,
+  `out_for_delivery`, or `delivered` as "real" spend/revenue — `pending`
+  orders (not yet accepted) and `rejected`/`cancelled` ones are excluded.
+  That threshold lives in `lib/reportUtils.js` if you want it stricter
+  (e.g. only count `delivered`) or looser.
