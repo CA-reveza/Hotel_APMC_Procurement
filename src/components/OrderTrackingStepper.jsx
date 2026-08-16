@@ -33,7 +33,7 @@ export default function OrderTrackingStepper({ order, delivery }) {
             <div key={step.key} className={`tracking-step ${done ? 'done' : ''}`}>
               <div className="tracking-dot">{done ? '✓' : i + 1}</div>
               <div className="tracking-label">
-                {isOutForDelivery && viaMotor ? 'In MoveIT' : step.label}
+                {isOutForDelivery && viaMotor ? 'In MOTOR' : step.label}
               </div>
               {i < STEPS.length - 1 && <div className={`tracking-line ${i < currentIndex ? 'done' : ''}`} />}
             </div>

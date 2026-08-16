@@ -9,12 +9,12 @@ export function getDeliveryStatus(delivery) {
 
   if (delivery.fulfilled_via === 'motor') {
     const s = delivery.motor_status
-    if (s === 'in_transit') return { label: 'MoveIT: in transit', className: 'in-transit' }
-    if (s === 'picked_up') return { label: 'MoveIT: picked up', className: 'picked-up' }
-    if (s === 'accepted') return { label: 'MoveIT: driver assigned', className: 'assigned' }
-    if (s === 'completed') return { label: 'MoveIT: delivered', className: 'delivered' }
-    if (s === 'cancelled') return { label: 'MoveIT: cancelled', className: 'cancelled' }
-    return { label: 'MoveIT: waiting for driver', className: 'requested' }
+    if (s === 'in_transit') return { label: 'MOTOR: in transit', className: 'in-transit' }
+    if (s === 'picked_up') return { label: 'MOTOR: picked up', className: 'picked-up' }
+    if (s === 'accepted') return { label: 'MOTOR: driver assigned', className: 'assigned' }
+    if (s === 'completed') return { label: 'MOTOR: delivered', className: 'delivered' }
+    if (s === 'cancelled') return { label: 'MOTOR: cancelled', className: 'cancelled' }
+    return { label: 'MOTOR: waiting for driver', className: 'requested' }
   }
 
   if (delivery.vehicle_type) {
