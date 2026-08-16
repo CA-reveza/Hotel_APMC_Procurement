@@ -7,7 +7,7 @@ import MotorStatus from './MotorStatus'
 // consolidation hub per plan §7). Hotels and drivers see relevant parts
 // read-only. Three ways to fulfil a delivery: type in a partner's name/phone
 // manually, book a vehicle from OrderIt's own in-house driver pool (see
-// DriverDashboard.jsx), or book it out to the separate MOTOR app.
+// DriverDashboard.jsx), or book it out to the separate MoveIT app.
 export default function DeliveryPanel({ orderId, viewerRole }) {
   const [delivery, setDelivery] = useState(null)
   const [editing, setEditing] = useState(false)
@@ -47,7 +47,7 @@ export default function DeliveryPanel({ orderId, viewerRole }) {
     })
     setBusy(false)
     if (error) {
-      setError(error.message || 'Failed to book via MOTOR. Check that the Edge Function is deployed and MOTOR secrets are set.')
+      setError(error.message || 'Failed to book via MoveIT. Check that the Edge Function is deployed and MoveIT secrets are set.')
     } else {
       setBookingMode(null)
       load()
@@ -87,7 +87,7 @@ export default function DeliveryPanel({ orderId, viewerRole }) {
                 {delivery?.partner_name ? 'Edit partner' : 'Set partner manually'}
               </button>
               {!delivery?.vehicle_type && (
-                <button className="btn-link" onClick={() => setBookingMode('motor')}>Book via MOTOR</button>
+                <button className="btn-link" onClick={() => setBookingMode('motor')}>Book via MoveIT</button>
               )}
             </span>
           )}
@@ -114,7 +114,7 @@ export default function DeliveryPanel({ orderId, viewerRole }) {
 
       {bookingMode && (
         <div className="delivery-form">
-          <div className="muted small">Booking via MOTOR</div>
+          <div className="muted small">Booking via MoveIT</div>
           <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)}>
             {VEHICLE_TYPES.map((v) => (
               <option key={v.id} value={v.id}>{v.label} — {v.desc} (up to {v.capacityKg}kg)</option>
@@ -130,7 +130,7 @@ export default function DeliveryPanel({ orderId, viewerRole }) {
           {error && <div className="alert alert-error">{error}</div>}
           <div className="delivery-form-actions">
             <button className="btn btn-primary" disabled={busy || !distanceKm} onClick={requestMotorVehicle}>
-              {busy ? 'Requesting…' : 'Book via MOTOR'}
+              {busy ? 'Requesting…' : 'Book via MoveIT'}
             </button>
             <button className="btn-link" onClick={() => { setBookingMode(null); setError('') }}>Cancel</button>
           </div>
@@ -147,7 +147,7 @@ export default function DeliveryPanel({ orderId, viewerRole }) {
 
       {canEdit && delivery && !editing && !bookingMode && isMotor && !delivery.delivered_at && (
         <div className="delivery-form-actions">
-          <button className="btn-link" onClick={markDelivered}>Force mark delivered (if MOTOR sync is stuck)</button>
+          <button className="btn-link" onClick={markDelivered}>Force mark delivered (if MoveIT sync is stuck)</button>
         </div>
       )}
     </div>
@@ -164,7 +164,7 @@ function summaryText(delivery, vehicleLabel) {
     parts.push(vehicleLabel || delivery.vehicle_type)
     if (delivery.distance_km) parts.push(`${delivery.distance_km} km`)
     if (delivery.fare_estimate) parts.push(`≈₹${delivery.fare_estimate}`)
-    if (delivery.fulfilled_via === 'motor') parts.push('via MOTOR')
+    if (delivery.fulfilled_via === 'motor') parts.push('via MoveIT')
     else parts.push(delivery.driver_id ? 'Driver assigned' : 'Waiting for a driver to accept')
   } else if (delivery.partner_name) {
     parts.push(delivery.partner_name)

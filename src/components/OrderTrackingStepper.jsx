@@ -8,7 +8,7 @@ const STEPS = [
 const STEP_INDEX = Object.fromEntries(STEPS.map((s, i) => [s.key, i]))
 
 // A compact horizontal tracker for the order detail view — the doc's
-// "Confirmed → Paid → In MOTOR → Delivered" idea, adapted to this app's
+// "Confirmed → Paid → In MoveIT → Delivered" idea, adapted to this app's
 // actual order.status values plus a separate payment badge (payment isn't
 // strictly sequential here — an order can be paid before or after packing).
 export default function OrderTrackingStepper({ order, delivery }) {
@@ -33,7 +33,7 @@ export default function OrderTrackingStepper({ order, delivery }) {
             <div key={step.key} className={`tracking-step ${done ? 'done' : ''}`}>
               <div className="tracking-dot">{done ? '✓' : i + 1}</div>
               <div className="tracking-label">
-                {isOutForDelivery && viaMotor ? 'In MOTOR' : step.label}
+                {isOutForDelivery && viaMotor ? 'In MoveIT' : step.label}
               </div>
               {i < STEPS.length - 1 && <div className={`tracking-line ${i < currentIndex ? 'done' : ''}`} />}
             </div>
