@@ -3,7 +3,10 @@ export default function Navbar({ profile, onSignOut }) {
 
   return (
     <header className="navbar">
-      <div className="navbar-brand">OrderIT</div>
+      <div className="navbar-brand">
+        <img src="/logo.png" alt="OrderIT" className="navbar-logo" />
+        <span className="navbar-tagline">You order...We Deliver...</span>
+      </div>
       <div className="navbar-user">
         <span className="role-badge">{roleLabel}</span>
         <span className="user-name">{profile.full_name || profile.email}</span>
