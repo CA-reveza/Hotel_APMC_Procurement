@@ -1,18 +1,24 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../supabaseClient'
-import { VEHICLE_TYPES, estimateFare } from '../lib/vehiclePricing'
+import { VEHICLE_TYPES } from '../lib/vehiclePricing'
 import MotorStatus from './MotorStatus'
 
 // Editable by supplier/admin (direct supplier→hotel delivery, or routed via a
 // consolidation hub per plan §7). Hotels and drivers see relevant parts
-// read-only. Two ways to fulfil a delivery: type in a partner's name/phone
-// manually, or book it out to the separate MOTOR app.
+// read-only. Booking a delivery is only allowed once the order has been paid
+// AND packed — skipping straight from "accepted" to booking a vehicle let a
+// delivery get marked complete on an order that was never packed or paid,
+// which is exactly the mistake this gate exists to prevent.
 //
-// Booking a delivery — either way — is only allowed once the order has been
-// paid AND packed. Skipping straight from "accepted" to booking a vehicle
-// let a delivery get marked complete on an order that was never packed or
-// paid, which is exactly the mistake this gate exists to prevent.
-export default function DeliveryPanel({ orderId, viewerRole, orderStatus, paymentStatus }) {
+// The fare charged for a MOTOR booking is always the order's own
+// delivery_charge (already fixed at checkout, per the ₹140/5km + ₹20/km
+// formula) — never recomputed from distance at booking time, so there's only
+// ever one number for "what delivery costs" on a given order.
+//
+// "Set partner manually" is temporarily removed (MOTOR-only for now) —
+// the code is still here, just not rendered, so it's a one-line change to
+// bring back later.
+export default function DeliveryPanel({ orderId, viewerRole, orderStatus, paymentStatus, orderDeliveryCharge }) {
   const [delivery, setDelivery] = useState(null)
   const [editing, setEditing] = useState(false)
   const [bookingMode, setBookingMode] = useState(null)
@@ -21,6 +27,8 @@ export default function DeliveryPanel({ orderId, viewerRole, orderStatus, paymen
   const [distanceKm, setDistanceKm] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+
+  const SHOW_MANUAL_PARTNER = false // flip to true to bring "Set partner manually" back
 
   const load = useCallback(async () => {
     const { data } = await supabase.from('deliveries').select('*').eq('order_id', orderId).maybeSingle()
@@ -63,9 +71,6 @@ export default function DeliveryPanel({ orderId, viewerRole, orderStatus, paymen
       setBookingMode(null)
       load()
     }
-    // Note: book-motor-delivery itself updates orders.delivery_charge to the
-    // real computed fare (replacing the checkout estimate) — the grand_total
-    // sync trigger picks that up automatically, no extra write needed here.
   }
 
   const markPicked = () => supabase.from('deliveries').upsert(
@@ -102,14 +107,16 @@ export default function DeliveryPanel({ orderId, viewerRole, orderStatus, paymen
           )}
           {canEdit && (
             <span className="delivery-actions-inline">
-              {delivery && (
+              {delivery && SHOW_MANUAL_PARTNER && (
                 <button className="btn-link" onClick={() => setEditing(true)}>
                   {delivery?.partner_name ? 'Edit partner' : 'Set partner manually'}
                 </button>
               )}
               {!delivery && bookingAllowed && (
                 <>
-                  <button className="btn-link" onClick={() => setEditing(true)}>Set partner manually</button>
+                  {SHOW_MANUAL_PARTNER && (
+                    <button className="btn-link" onClick={() => setEditing(true)}>Set partner manually</button>
+                  )}
                   <button className="btn-link" onClick={() => setBookingMode('motor')}>Book via MOTOR</button>
                 </>
               )}
@@ -145,12 +152,12 @@ export default function DeliveryPanel({ orderId, viewerRole, orderStatus, paymen
             ))}
           </select>
           <input
-            type="number" min="0" step="0.5" placeholder="Distance (km)"
+            type="number" min="0" step="0.5" placeholder="Distance (km, for MOTOR's own route record)"
             value={distanceKm} onChange={(e) => setDistanceKm(e.target.value)}
           />
-          {distanceKm > 0 && (
-            <div className="muted small">Estimated fare: ₹{estimateFare(vehicleType, parseFloat(distanceKm))}</div>
-          )}
+          <div className="muted small">
+            Delivery charge (from this order, already fixed at checkout): ₹{Number(orderDeliveryCharge || 0).toFixed(2)}
+          </div>
           {error && <div className="alert alert-error">{error}</div>}
           <div className="delivery-form-actions">
             <button className="btn btn-primary" disabled={busy || !distanceKm} onClick={requestMotorVehicle}>

@@ -45,7 +45,7 @@ export default function Login() {
   return (
     <div className="center-screen">
       <div className="auth-card">
-        <h1>OrderIt</h1>
+        <h1>OrderIT</h1>
         <p className="subtitle">Bengaluru B2B procurement platform for hotels & APMC suppliers</p>
 
         <div className="tabs">

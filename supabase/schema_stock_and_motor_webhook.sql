@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Migration 010 — Stock deduction, low-stock threshold, MOTOR webhook prep
--- Run on the OrderIt Supabase project. Safe to re-run.
+-- Run on the OrderIT Supabase project. Safe to re-run.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------

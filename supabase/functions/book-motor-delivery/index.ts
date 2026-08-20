@@ -1,7 +1,7 @@
 // supabase/functions/book-motor-delivery/index.ts
 //
-// Bridges an OrderIt delivery to a real booking in the separate MOTOR app.
-// MOTOR is a different Supabase project with its own auth — OrderIt users
+// Bridges an OrderIT delivery to a real booking in the separate MOTOR app.
+// MOTOR is a different Supabase project with its own auth — OrderIT users
 // don't have MOTOR accounts, so this Edge Function uses MOTOR's
 // *service-role* key (bypassing MOTOR's RLS) to insert the booking directly.
 // MOTOR's existing driver console then picks it up exactly like any other
@@ -10,7 +10,7 @@
 //
 // Deploy:
 //   supabase functions deploy book-motor-delivery
-// Secrets (set once, on the OrderIt project):
+// Secrets (set once, on the OrderIT project):
 //   supabase secrets set MOTOR_SUPABASE_URL=https://xxxx.supabase.co MOTOR_SERVICE_ROLE_KEY=xxx
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
@@ -21,22 +21,13 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const MOTOR_SUPABASE_URL = Deno.env.get('MOTOR_SUPABASE_URL')!
 const MOTOR_SERVICE_ROLE_KEY = Deno.env.get('MOTOR_SERVICE_ROLE_KEY')!
 
-// Same catalog/formula as src/lib/vehiclePricing.js — duplicated here since
-// Edge Functions can't import from the app's src/ tree, and re-computing the
-// fare server-side (rather than trusting whatever the client sent) keeps the
-// number honest.
-const VEHICLE_TYPES: Record<string, { base: number; perKm: number }> = {
-  bike: { base: 30, perKm: 6 },
-  three_wheeler: { base: 60, perKm: 11 },
-  pickup: { base: 120, perKm: 16 },
-  mini_truck: { base: 220, perKm: 22 },
-  large_truck: { base: 450, perKm: 34 }
-}
-function estimateFare(vehicleType: string, km: number) {
-  const v = VEHICLE_TYPES[vehicleType]
-  if (!v || !km || km <= 0) return 0
-  return Math.round(v.base + v.perKm * Math.max(km, 1))
-}
+// Recognized vehicle types, kept only to validate the request — the fare
+// itself comes from the order's own delivery_charge (set at checkout via
+// OrderIT's ₹140-base + ₹20/km formula), not recomputed here. The order is
+// the single source of truth for what the hotel was charged; MOTOR's
+// booking.fare_estimate just carries that same number through for the
+// driver to see, rather than a second, different calculation.
+const KNOWN_VEHICLE_TYPES = new Set(['bike', 'three_wheeler', 'pickup', 'mini_truck', 'large_truck'])
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -51,9 +42,9 @@ Deno.serve(async (req) => {
     if (!order_id || !vehicle_type || !distance_km) {
       return json({ error: 'order_id, vehicle_type and distance_km are required' }, 400)
     }
-    if (!VEHICLE_TYPES[vehicle_type]) return json({ error: 'Unknown vehicle_type' }, 400)
+    if (!KNOWN_VEHICLE_TYPES.has(vehicle_type)) return json({ error: 'Unknown vehicle_type' }, 400)
 
-    // Act as the calling user (respects OrderIt's RLS) to confirm they can
+    // Act as the calling user (respects OrderIT's RLS) to confirm they can
     // actually see this order before we book anything on their behalf.
     const authHeader = req.headers.get('Authorization') ?? ''
     const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -61,7 +52,7 @@ Deno.serve(async (req) => {
     })
     const { data: order, error: orderErr } = await userClient
       .from('orders')
-      .select('id, status, payment_status, delivery_address, hotels(name, address), suppliers(name, apmc_yard, address)')
+      .select('id, status, payment_status, delivery_charge, delivery_address, hotels(name, address), suppliers(name, apmc_yard, address)')
       .eq('id', order_id)
       .single()
     if (orderErr || !order) return json({ error: 'Order not found or not accessible' }, 404)
@@ -75,7 +66,7 @@ Deno.serve(async (req) => {
       return json({ error: 'Order must be packed before a delivery can be booked' }, 400)
     }
 
-    const fare = estimateFare(vehicle_type, Number(distance_km))
+    const fare = Number(order.delivery_charge) || 0
     const pickup = order.suppliers?.address || order.suppliers?.apmc_yard || order.suppliers?.name || 'Supplier'
     const drop = order.delivery_address || order.hotels?.address || order.hotels?.name || 'Hotel'
 
@@ -93,7 +84,7 @@ Deno.serve(async (req) => {
         vehicle_type,
         fare_estimate: fare,
         status: 'pending',
-        notes: `OrderIt order #${order.id.slice(0, 8)}`,
+        notes: `OrderIT order #${order.id.slice(0, 8)}`,
         source: 'orderit',
         external_order_id: order.id
       })
@@ -102,8 +93,10 @@ Deno.serve(async (req) => {
 
     if (motorErr) return json({ error: `MOTOR booking failed: ${motorErr.message}` }, 502)
 
-    // Mirror the booking back onto OrderIt's own deliveries row so the
-    // OrderIt UI has something to query without hitting MOTOR every time.
+    // Mirror the booking back onto OrderIT's own deliveries row so the
+    // OrderIT UI has something to query without hitting MOTOR every time.
+    // Note: orders.delivery_charge is deliberately left untouched — it stays
+    // exactly what was charged to the hotel at checkout.
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     await adminClient.from('deliveries').upsert(
       {
@@ -119,12 +112,6 @@ Deno.serve(async (req) => {
       },
       { onConflict: 'order_id' }
     )
-
-    // Replace the checkout-time delivery estimate with the real fare now
-    // that an actual distance/vehicle has been booked — the grand_total sync
-    // trigger (schema_grand_total_sync_trigger.sql) recomputes the order's
-    // total automatically from this.
-    await adminClient.from('orders').update({ delivery_charge: fare }).eq('id', order.id)
 
     return json({ motor_booking_id: booking.id, fare_estimate: fare, status: booking.status })
   } catch (e) {

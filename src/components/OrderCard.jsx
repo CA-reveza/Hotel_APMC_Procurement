@@ -97,7 +97,13 @@ export default function OrderCard({ order, viewerRole, onChanged }) {
         )}
       </div>
 
-      <DeliveryPanel orderId={order.id} viewerRole={viewerRole} orderStatus={order.status} paymentStatus={order.payment_status} />
+      <DeliveryPanel
+        orderId={order.id}
+        viewerRole={viewerRole}
+        orderStatus={order.status}
+        paymentStatus={order.payment_status}
+        orderDeliveryCharge={order.delivery_charge}
+      />
 
       {paymentGateBlocked && viewerRole === 'supplier' && (
         <div className="alert alert-info">Waiting for payment before this order can move to packed/delivery.</div>

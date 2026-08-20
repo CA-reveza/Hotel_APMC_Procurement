@@ -1,8 +1,8 @@
 // supabase/functions/motor-status-webhook/index.ts
 //
 // Receives a push from MOTOR's own Supabase Database Webhook (configured on
-// MOTOR's project, not OrderIt's) every time a booking row changes — most
-// importantly, when a driver accepts one. Updates OrderIt's own `deliveries`
+// MOTOR's project, not OrderIT's) every time a booking row changes — most
+// importantly, when a driver accepts one. Updates OrderIT's own `deliveries`
 // row so it shows up immediately in both the Hotel and Supplier order lists,
 // without the browser needing to be looking at that specific order or have
 // MOTOR's anon key configured.
@@ -14,10 +14,10 @@
 //
 // Deploy:
 //   supabase functions deploy motor-status-webhook --no-verify-jwt
-// (--no-verify-jwt because MOTOR's webhook caller has no OrderIt user JWT —
+// (--no-verify-jwt because MOTOR's webhook caller has no OrderIT user JWT —
 // instead we verify a shared secret header below.)
 //
-// Secrets (set once, on the OrderIt project):
+// Secrets (set once, on the OrderIT project):
 //   supabase secrets set MOTOR_WEBHOOK_SECRET=some-long-random-string
 //
 // Then, on the MOTOR project: Database → Webhooks → Create a new webhook
@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
   try {
     // Verify this really came from the MOTOR webhook, not a random caller —
     // this function is deployed with --no-verify-jwt (public URL) since
-    // MOTOR has no OrderIt session to send.
+    // MOTOR has no OrderIT session to send.
     if (MOTOR_WEBHOOK_SECRET) {
       const provided = req.headers.get('x-webhook-secret')
       if (provided !== MOTOR_WEBHOOK_SECRET) {
@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
     const update: Record<string, unknown> = { motor_status: booking.status }
     if (booking.status === 'accepted' && booking.driver_id) {
       // Note: this is MOTOR's driver id, in MOTOR's own auth system — stored
-      // here only for display, not linked to an OrderIt profile.
+      // here only for display, not linked to an OrderIT profile.
       update.motor_driver_id = booking.driver_id
     }
     if (booking.status === 'picked_up') update.picked_up_at = new Date().toISOString()

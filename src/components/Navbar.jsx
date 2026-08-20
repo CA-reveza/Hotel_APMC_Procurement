@@ -3,7 +3,7 @@ export default function Navbar({ profile, onSignOut }) {
 
   return (
     <header className="navbar">
-      <div className="navbar-brand">OrderIt</div>
+      <div className="navbar-brand">OrderIT</div>
       <div className="navbar-user">
         <span className="role-badge">{roleLabel}</span>
         <span className="user-name">{profile.full_name || profile.email}</span>

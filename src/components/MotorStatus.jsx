@@ -13,7 +13,7 @@ const MOTOR_STATUS_LABEL = {
 
 // Subscribes directly to MOTOR's own Realtime feed for this one booking (if
 // VITE_MOTOR_SUPABASE_URL/ANON_KEY are configured), and mirrors any change
-// back onto OrderIt's own deliveries row — both `motor_status` (for this
+// back onto OrderIT's own deliveries row — both `motor_status` (for this
 // badge) AND the picked_up_at/in_transit_at/delivered_at timestamps (which
 // DeliveryPanel's summary line and manual-button visibility actually read),
 // so the two don't drift out of sync with each other. This is a second,

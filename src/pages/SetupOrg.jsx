@@ -11,6 +11,7 @@ export default function SetupOrg({ profile, onDone }) {
   const [address, setAddress] = useState('')
   const [apmcYard, setApmcYard] = useState('')
   const [gst, setGst] = useState('')
+  const [fssai, setFssai] = useState('')
   const [vehicleType, setVehicleType] = useState(VEHICLE_TYPES[0].id)
   const [vehicleNumber, setVehicleNumber] = useState('')
   const [error, setError] = useState('')
@@ -27,7 +28,7 @@ export default function SetupOrg({ profile, onDone }) {
       payload = { id: profile.id, name, phone: profile.phone || null, vehicle_type: vehicleType, vehicle_number: vehicleNumber }
     } else if (isHotel) {
       table = 'hotels'
-      payload = { profile_id: profile.id, name, address, gst_number: gst, phone: profile.phone || null, email: profile.email }
+      payload = { profile_id: profile.id, name, address, gst_number: gst, fssai_number: fssai, phone: profile.phone || null, email: profile.email }
     } else {
       table = 'suppliers'
       payload = { profile_id: profile.id, name, address, gst_number: gst, apmc_yard: apmcYard }
@@ -80,6 +81,13 @@ export default function SetupOrg({ profile, onDone }) {
               </select>
               <label>Vehicle number</label>
               <input value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} placeholder="KA-01-AB-1234" />
+            </>
+          )}
+
+          {isHotel && (
+            <>
+              <label>FSSAI license number (required)</label>
+              <input value={fssai} onChange={(e) => setFssai(e.target.value)} placeholder="14-digit FSSAI number" required />
             </>
           )}
 

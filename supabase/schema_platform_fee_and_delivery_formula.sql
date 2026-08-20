@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Migration — Platform fee + delivery charge formula
--- Run on the OrderIt Supabase project, after all previous migrations.
+-- Run on the OrderIT Supabase project, after all previous migrations.
 -- Safe to re-run.
 --
 -- Delivery charge: ₹140 flat for up to 5 km, then +₹20 for every km beyond

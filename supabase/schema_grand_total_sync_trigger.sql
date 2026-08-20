@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Migration 012 — Auto-sync grand_total when delivery_charge changes
--- Run on the OrderIt Supabase project, after schema_platform_fee_and_delivery_formula.sql.
+-- Run on the OrderIT Supabase project, after schema_platform_fee_and_delivery_formula.sql.
 -- Safe to re-run.
 --
 -- Until now, delivery_charge was only ever set once, at order creation

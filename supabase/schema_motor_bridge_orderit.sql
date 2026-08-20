@@ -1,7 +1,7 @@
 -- ============================================================================
--- Migration 009 — MOTOR bridge columns (run on the OrderIt/hotel-apmc-platform
+-- Migration 009 — MOTOR bridge columns (run on the OrderIT/hotel-apmc-platform
 -- Supabase project)
--- Adds tracking columns so a delivery can be fulfilled either by OrderIt's
+-- Adds tracking columns so a delivery can be fulfilled either by OrderIT's
 -- own in-house driver pool (unchanged) or bridged out to the separate MOTOR
 -- app as a real booking in MOTOR's own database.
 -- Safe to re-run.
