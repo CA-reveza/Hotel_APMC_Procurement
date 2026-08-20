@@ -195,6 +195,8 @@ select {
 .status-out_for_delivery { background: #fde7cd; color: #9a4d00; }
 .status-delivered { background: #dcf5e3; color: #1c6e4a; }
 .status-rejected, .status-cancelled { background: #fde8e6; color: var(--danger); }
+.status-online { background: #dcf5e3; color: var(--primary-dark); }
+.status-offline { background: #eceef1; color: var(--muted); }
 
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
 .stat-card { text-align: center; }

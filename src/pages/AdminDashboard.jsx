@@ -32,6 +32,7 @@ export default function AdminDashboard() {
     const channel = supabase
       .channel('admin-orders')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => loadAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, () => loadAll())
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [loadAll])
@@ -126,16 +127,21 @@ export default function AdminDashboard() {
 
       {tab === 'drivers' && (
         <table className="table">
-          <thead><tr><th>Name</th><th>Phone</th><th>Vehicle</th><th>Vehicle no.</th></tr></thead>
+          <thead><tr><th>Name</th><th>Phone</th><th>Vehicle</th><th>Vehicle no.</th><th>Status</th></tr></thead>
           <tbody>
             {drivers.map((d) => (
               <tr key={d.id}>
                 <td>{d.name}</td><td>{d.phone}</td>
                 <td>{vehicleById(d.vehicle_type)?.label || d.vehicle_type}</td>
                 <td>{d.vehicle_number}</td>
+                <td>
+                  <span className={`status-badge ${d.is_online ? 'status-online' : 'status-offline'}`}>
+                    {d.is_online ? 'Online' : 'Offline'}
+                  </span>
+                </td>
               </tr>
             ))}
-            {!drivers.length && <tr><td colSpan={4} className="muted">No delivery partners registered yet.</td></tr>}
+            {!drivers.length && <tr><td colSpan={5} className="muted">No delivery partners registered yet.</td></tr>}
           </tbody>
         </table>
       )}

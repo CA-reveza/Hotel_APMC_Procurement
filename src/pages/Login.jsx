@@ -47,7 +47,8 @@ export default function Login() {
       <div className="auth-card">
         <img src="/logo.png" alt="OrderIT" className="auth-logo" />
         <p className="tagline">You order...We Deliver...</p>
-        
+        <p className="subtitle">Bengaluru B2B procurement platform for hotels & APMC suppliers</p>
+
         <div className="tabs">
           <button className={mode === 'signin' ? 'tab active' : 'tab'} onClick={() => setMode('signin')}>Sign in</button>
           <button className={mode === 'signup' ? 'tab active' : 'tab'} onClick={() => setMode('signup')}>Sign up</button>
