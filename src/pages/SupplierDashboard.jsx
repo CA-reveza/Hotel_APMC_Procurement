@@ -59,7 +59,7 @@ export default function SupplierDashboard({ supplier }) {
   }, [supplier, loadOrders])
 
   // deliveries has no supplier_id to filter on, so refresh on any change —
-  // this is what surfaces a MoveIT driver accepting/progressing a booking.
+  // this is what surfaces a MOTOR driver accepting/progressing a booking.
   useEffect(() => {
     if (!supplier?.id) return
     const channel = supabase

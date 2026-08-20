@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../supabaseClient'
-import OrderList from '../components/OrderList'
+import AdminOrderTable from '../components/AdminOrderTable'
 import { vehicleById } from '../lib/vehiclePricing'
 
 export default function AdminDashboard() {
@@ -70,7 +70,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {tab === 'orders' && <OrderList orders={orders} viewerRole="admin" onChanged={loadAll} />}
+      {tab === 'orders' && <AdminOrderTable orders={orders} onChanged={loadAll} />}
 
       {tab === 'hotels' && (
         <table className="table">

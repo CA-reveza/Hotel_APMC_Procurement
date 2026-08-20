@@ -37,12 +37,14 @@ export default function SupplierOrderTable({ orders, onChanged }) {
             <th>Amount</th>
             <th>Status</th>
             <th>Delivery</th>
+            <th>Payment</th>
           </tr>
         </thead>
         <tbody>
           {orders.map((order) => {
             const isExpanded = expandedId === order.id
             const deliveryStatus = getDeliveryStatus(orderDelivery(order))
+            const grandTotal = Number(order.grand_total) || Number(order.order_total)
             return (
               <Fragment key={order.id}>
                 <tr>
@@ -58,13 +60,18 @@ export default function SupplierOrderTable({ orders, onChanged }) {
                       #{order.id.slice(0, 8)} {isExpanded ? '▲' : '▼'}
                     </button>
                   </td>
-                  <td>₹{Number(order.order_total).toFixed(2)}</td>
+                  <td>₹{grandTotal.toFixed(2)}</td>
                   <td><span className={`status-badge status-${order.status}`}>{STATUS_LABEL[order.status]}</span></td>
                   <td><span className={`delivery-badge delivery-${deliveryStatus.className}`}>{deliveryStatus.label}</span></td>
+                  <td>
+                    <span className={`pay-badge pay-${order.payment_status === 'paid' ? 'paid' : 'unpaid'}`}>
+                      {order.payment_status === 'paid' ? '✓ Paid' : 'Unpaid'}
+                    </span>
+                  </td>
                 </tr>
                 {isExpanded && (
                   <tr>
-                    <td colSpan={7} className="order-detail-cell">
+                    <td colSpan={8} className="order-detail-cell">
                       <OrderCard order={order} viewerRole="supplier" onChanged={onChanged} />
                     </td>
                   </tr>

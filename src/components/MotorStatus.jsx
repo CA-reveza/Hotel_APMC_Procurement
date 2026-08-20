@@ -11,7 +11,7 @@ const MOTOR_STATUS_LABEL = {
   cancelled: 'Cancelled'
 }
 
-// Subscribes directly to MoveIT's own Realtime feed for this one booking (if
+// Subscribes directly to MOTOR's own Realtime feed for this one booking (if
 // VITE_MOTOR_SUPABASE_URL/ANON_KEY are configured), and mirrors any change
 // back onto OrderIt's own deliveries row — both `motor_status` (for this
 // badge) AND the picked_up_at/in_transit_at/delivered_at timestamps (which
@@ -57,7 +57,7 @@ export default function MotorStatus({ orderId, motorBookingId, fallbackStatus })
 
   return (
     <span className="muted small">
-      🏍️ MoveIT: {MOTOR_STATUS_LABEL[status] || status || 'Booked'}
+      🏍️ MOTOR: {MOTOR_STATUS_LABEL[status] || status || 'Booked'}
       {!motorSupabase && ' (live tracking not configured — see README)'}
     </span>
   )

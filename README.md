@@ -28,8 +28,10 @@ hotel-apmc-platform/
 │   ├── RUN_ON_MOTOR_PROJECT_bridge.sql   # ⚠️ run on MOTOR's Supabase, not OrderIt's
 │   ├── schema_stock_and_motor_webhook.sql # stock deduction on packing, low-stock threshold
 │   └── functions/                     # Edge Functions (Deno) — the only server-side code in this project
-│       ├── create-razorpay-order/
-│       ├── verify-razorpay-payment/
+│       ├── create-razorpay-order/    # hotel: in-app Checkout
+│       ├── verify-razorpay-payment/  # hotel: verifies Checkout signature, marks paid
+│       ├── create-payment-link/      # supplier: "Request payment (Razorpay)"
+│       ├── razorpay-webhook/         # marks paid when a Payment Link is completed
 │       ├── whatsapp-webhook/
 │       ├── book-motor-delivery/
 │       ├── motor-status-webhook/
@@ -60,7 +62,8 @@ hotel-apmc-platform/
 │       ├── SupplierRevenueReport.jsx # supplier Reports tab (GMV, commission, net revenue, trend)
 │       ├── OrderTrackingStepper.jsx  # visual Placed→Accepted→Packed→Out for delivery→Delivered tracker
 │       ├── MotorStatus.jsx        # live MOTOR booking status pill (optional)
-│       ├── PaymentButton.jsx      # Razorpay Checkout trigger
+│       ├── PaymentButton.jsx      # hotel: Razorpay Checkout trigger
+│       ├── SupplierPaymentActions.jsx # supplier: request payment link (Razorpay)
 │       ├── DeliveryPanel.jsx      # manual partner entry, or book a vehicle from the driver pool
 │       ├── QuoteRequests.jsx      # hotel side of multi-item supplier bidding
 │       └── OpenRequests.jsx       # supplier side of multi-item supplier bidding
@@ -92,11 +95,16 @@ Supabase directly — there's no separate Express API to deploy or keep in sync.
 **Five extra features on top of the MVP** (all in `schema_extensions.sql` +
 the components listed above):
 
-1. **Razorpay payments** — hotel taps **Pay ₹...** on an order → an Edge
+1. **Razorpay payments** — hotel taps **Make Payment** on an order → an Edge
    Function creates a Razorpay Order (key secret stays server-side) → Razorpay
    Checkout opens → on success another Edge Function verifies the payment
    signature server-side and marks the order `paid`. No payment status is
-   ever trusted from the browser alone.
+   ever trusted from the browser alone. On the supplier side, the **APMC
+   dashboard** has the matching **Request Payment** control: it creates a
+   Razorpay Payment Link that Razorpay texts/emails straight to the hotel
+   (order shows `Payment requested` until it's completed). There's no manual
+   "mark as paid" — every `paid` transition comes from a verified Razorpay
+   event (Checkout signature or the webhook below), never a button.
 2. **Delivery / consolidation routing** — each order gets a `DeliveryPanel`
    where the supplier or admin records whether it's going **direct** to the
    hotel or **via a consolidation hub** (plan §7), plus the delivery
@@ -153,6 +161,11 @@ the components listed above):
      Supabase project instead, not OrderIt's (see section 2a below)
    - `supabase/schema_stock_and_motor_webhook.sql` — stock deduction on
      packing, low-stock threshold, MOTOR webhook support
+   - `supabase/schema_platform_fee_and_delivery_formula.sql` — 3% platform
+     fee + tiered delivery charge on hotel orders
+   - `supabase/schema_grand_total_sync_trigger.sql` — keeps grand_total
+     correct whenever delivery_charge changes later (e.g. real MOTOR fare
+     replacing the checkout estimate once a vehicle is actually booked)
 
 ### 2a. Set up the extra features (optional — skip any you don't need yet)
 
@@ -169,14 +182,46 @@ the components listed above):
    ```
    (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` are
    already available to every Edge Function automatically — no need to set them.)
-4. Deploy the two payment functions:
+4. Deploy the payment functions:
    ```bash
    supabase functions deploy create-razorpay-order
    supabase functions deploy verify-razorpay-payment
+   supabase functions deploy create-payment-link
    ```
-5. That's it — the **Pay ₹...** button in the app calls these automatically
-   via `supabase.functions.invoke(...)`, using whatever project your `.env`
-   points at.
+5. That's it — the **Make Payment** button (hotel dashboard) and the
+   **Request Payment** button (APMC/supplier dashboard) call these
+   automatically via `supabase.functions.invoke(...)`, using whatever
+   project your `.env` points at.
+6. **Payment Links only** — since the hotel completes a requested payment on
+   Razorpay's own hosted page (not inside this app), a webhook is what
+   actually marks the order paid:
+   ```bash
+   supabase functions deploy razorpay-webhook --no-verify-jwt
+   ```
+   Then in the [Razorpay Dashboard → Settings → Webhooks](https://dashboard.razorpay.com/app/webhooks),
+   add a webhook pointing at
+   `https://YOUR_PROJECT_REF.supabase.co/functions/v1/razorpay-webhook`,
+   subscribe it to the **payment_link.paid** event, and copy the webhook
+   secret it generates into:
+   ```bash
+   supabase secrets set RAZORPAY_WEBHOOK_SECRET=whsec_xxx
+   ```
+   Without this step, `create-payment-link` still works (the hotel gets a
+   link and can pay it), but the order will stay on `Payment requested`
+   until the webhook is wired up — there's no manual override.
+
+**Troubleshooting "Failed to send a request to the Edge Function"** — this is
+the generic error `supabase.functions.invoke(...)` throws when the request
+never got a valid response, almost always because the function isn't
+deployed yet under that exact name in the linked project. Check:
+   ```bash
+   supabase functions list        # confirm create-payment-link shows up
+   supabase functions deploy create-payment-link
+   supabase functions logs create-payment-link   # see the actual error, if any
+   ```
+   Also confirm `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` are set
+   (`supabase secrets list`) and that your `.env`'s `VITE_SUPABASE_URL` /
+   `VITE_SUPABASE_ANON_KEY` point at the same project you just deployed to.
 
 **WhatsApp order intake** (via Twilio's WhatsApp Sandbox — free for testing)
 1. Deploy the function: `supabase functions deploy whatsapp-webhook`

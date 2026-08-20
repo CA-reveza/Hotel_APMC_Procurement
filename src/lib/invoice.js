@@ -46,14 +46,21 @@ export function downloadInvoice(order) {
   })
 
   const finalY = doc.lastAutoTable.finalY + 8
-  doc.setFontSize(10)
-  doc.text(`Order total: Rs. ${Number(order.order_total).toFixed(2)}`, 14, finalY)
+  const grandTotal = Number(order.grand_total) || Number(order.order_total)
+  doc.setFontSize(9)
+  doc.setTextColor(80)
+  doc.text(`Items subtotal: Rs. ${Number(order.order_total).toFixed(2)}`, 14, finalY)
+  doc.text(`Platform fee (${order.platform_fee_pct ?? 3}%): Rs. ${Number(order.platform_fee_amount || 0).toFixed(2)}`, 14, finalY + 6)
+  doc.text(`Delivery charge: Rs. ${Number(order.delivery_charge || 0).toFixed(2)}`, 14, finalY + 12)
+  doc.setFontSize(11)
+  doc.setTextColor(0)
+  doc.text(`Grand total: Rs. ${grandTotal.toFixed(2)}`, 14, finalY + 20)
   doc.setFontSize(8)
   doc.setTextColor(120)
   doc.text(
     `Platform commission (${order.commission_pct}%): Rs. ${Number(order.commission_amount).toFixed(2)} · Delivery contribution: Rs. ${Number(order.delivery_contribution).toFixed(2)}`,
     14,
-    finalY + 6
+    finalY + 28
   )
 
   doc.save(`invoice-${order.id.slice(0, 8)}.pdf`)

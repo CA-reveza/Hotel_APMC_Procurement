@@ -36,7 +36,13 @@ export default function OrderCard({ order, viewerRole, onChanged }) {
     if (!error) onChanged?.()
   }
 
-  const nextOptions = viewerRole === 'supplier' ? STATUS_FLOW[order.status] || [] : []
+  const isPaid = order.payment_status === 'paid'
+  // Once accepted, a supplier can't move an order to packed/out for
+  // delivery/delivered until the hotel has paid — payment gates all
+  // fulfilment progress past "accepted".
+  const paymentGateBlocked = order.status !== 'pending' && !isPaid
+  const nextOptions = viewerRole === 'supplier' && !paymentGateBlocked ? STATUS_FLOW[order.status] || [] : []
+  const grandTotal = Number(order.grand_total) || Number(order.order_total)
 
   return (
     <div className="card order-card">
@@ -51,6 +57,9 @@ export default function OrderCard({ order, viewerRole, onChanged }) {
       <OrderTrackingStepper order={order} delivery={delivery} />
 
       <div className="order-card-badges">
+        <span className={`pay-badge pay-${isPaid ? 'paid' : 'unpaid'}`}>
+          {isPaid ? '✓ Paid' : 'Payment pending'}
+        </span>
         {order.source === 'whatsapp' && <span className="pay-badge pay-whatsapp">via WhatsApp</span>}
       </div>
 
@@ -75,15 +84,24 @@ export default function OrderCard({ order, viewerRole, onChanged }) {
       </table>
 
       <div className="order-card-footer">
-        <div>Order total: <strong>₹{Number(order.order_total).toFixed(2)}</strong></div>
+        <div>
+          <div className="muted small">Items subtotal: ₹{Number(order.order_total).toFixed(2)}</div>
+          <div className="muted small">Platform fee ({order.platform_fee_pct ?? 3}%): ₹{Number(order.platform_fee_amount || 0).toFixed(2)}</div>
+          <div className="muted small">Delivery charge: ₹{Number(order.delivery_charge || 0).toFixed(2)}</div>
+          <div>Grand total: <strong>₹{grandTotal.toFixed(2)}</strong></div>
+        </div>
         {viewerRole !== 'hotel' && (
           <div className="muted small">
-            Commission ({order.commission_pct}%): ₹{Number(order.commission_amount).toFixed(2)} · Delivery: ₹{Number(order.delivery_contribution).toFixed(2)}
+            Commission ({order.commission_pct}%): ₹{Number(order.commission_amount).toFixed(2)} · Delivery contribution: ₹{Number(order.delivery_contribution).toFixed(2)}
           </div>
         )}
       </div>
 
-      <DeliveryPanel orderId={order.id} viewerRole={viewerRole} />
+      <DeliveryPanel orderId={order.id} viewerRole={viewerRole} orderStatus={order.status} paymentStatus={order.payment_status} />
+
+      {paymentGateBlocked && viewerRole === 'supplier' && (
+        <div className="alert alert-info">Waiting for payment before this order can move to packed/delivery.</div>
+      )}
 
       <div className="order-card-actions">
         {nextOptions.map((status) => (
@@ -96,7 +114,7 @@ export default function OrderCard({ order, viewerRole, onChanged }) {
             {busy ? '…' : `Mark ${STATUS_LABEL[status]}`}
           </button>
         ))}
-        {viewerRole === 'hotel' && order.payment_status !== 'paid' && !['rejected', 'cancelled'].includes(order.status) && (
+        {viewerRole === 'hotel' && !isPaid && !['rejected', 'cancelled'].includes(order.status) && (
           <PaymentButton order={order} onPaid={onChanged} />
         )}
         {order.status === 'delivered' && (

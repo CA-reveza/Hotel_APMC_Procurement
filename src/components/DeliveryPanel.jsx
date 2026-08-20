@@ -5,13 +5,17 @@ import MotorStatus from './MotorStatus'
 
 // Editable by supplier/admin (direct supplier→hotel delivery, or routed via a
 // consolidation hub per plan §7). Hotels and drivers see relevant parts
-// read-only. Three ways to fulfil a delivery: type in a partner's name/phone
-// manually, book a vehicle from OrderIt's own in-house driver pool (see
-// DriverDashboard.jsx), or book it out to the separate MoveIT app.
-export default function DeliveryPanel({ orderId, viewerRole }) {
+// read-only. Two ways to fulfil a delivery: type in a partner's name/phone
+// manually, or book it out to the separate MOTOR app.
+//
+// Booking a delivery — either way — is only allowed once the order has been
+// paid AND packed. Skipping straight from "accepted" to booking a vehicle
+// let a delivery get marked complete on an order that was never packed or
+// paid, which is exactly the mistake this gate exists to prevent.
+export default function DeliveryPanel({ orderId, viewerRole, orderStatus, paymentStatus }) {
   const [delivery, setDelivery] = useState(null)
   const [editing, setEditing] = useState(false)
-  const [bookingMode, setBookingMode] = useState(null) // null | 'internal' | 'motor'
+  const [bookingMode, setBookingMode] = useState(null)
   const [form, setForm] = useState({ delivery_type: 'direct', hub_name: '', partner_name: '', partner_phone: '' })
   const [vehicleType, setVehicleType] = useState(VEHICLE_TYPES[0].id)
   const [distanceKm, setDistanceKm] = useState('')
@@ -26,7 +30,14 @@ export default function DeliveryPanel({ orderId, viewerRole }) {
 
   useEffect(() => { load() }, [load])
 
-  const canEdit = viewerRole === 'supplier' || viewerRole === 'admin'
+  const isStaff = viewerRole === 'supplier' || viewerRole === 'admin'
+  const isPacked = ['packed', 'out_for_delivery', 'delivered'].includes(orderStatus)
+  const isPaid = paymentStatus === 'paid'
+  const bookingAllowed = isStaff && isPaid && isPacked
+  // Staff can still edit an already-existing delivery record (e.g. update
+  // partner phone, advance status) even if these flip later — the gate is
+  // only on *starting* a new booking.
+  const canEdit = isStaff && (delivery ? true : bookingAllowed)
 
   const save = async () => {
     setBusy(true)
@@ -47,11 +58,14 @@ export default function DeliveryPanel({ orderId, viewerRole }) {
     })
     setBusy(false)
     if (error) {
-      setError(error.message || 'Failed to book via MoveIT. Check that the Edge Function is deployed and MoveIT secrets are set.')
+      setError(error.message || 'Failed to book via MOTOR. Check that the Edge Function is deployed and MOTOR secrets are set.')
     } else {
       setBookingMode(null)
       load()
     }
+    // Note: book-motor-delivery itself updates orders.delivery_charge to the
+    // real computed fare (replacing the checkout estimate) — the grand_total
+    // sync trigger picks that up automatically, no extra write needed here.
   }
 
   const markPicked = () => supabase.from('deliveries').upsert(
@@ -66,7 +80,7 @@ export default function DeliveryPanel({ orderId, viewerRole }) {
     { order_id: orderId, ...form, delivered_at: new Date().toISOString() }, { onConflict: 'order_id' }
   ).then(load)
 
-  if (!canEdit && !delivery) return null
+  if (!isStaff && !delivery) return null
 
   const vehicleLabel = delivery?.vehicle_type ? VEHICLE_TYPES.find((v) => v.id === delivery.vehicle_type)?.label : null
   const isMotor = delivery?.fulfilled_via === 'motor'
@@ -81,13 +95,23 @@ export default function DeliveryPanel({ orderId, viewerRole }) {
           {isMotor && delivery.motor_booking_id && (
             <MotorStatus orderId={orderId} motorBookingId={delivery.motor_booking_id} fallbackStatus={delivery.motor_status} />
           )}
+          {isStaff && !delivery && !bookingAllowed && (
+            <span className="muted small">
+              {!isPaid ? 'Payment required before delivery can be booked.' : 'Order must be packed before delivery can be booked.'}
+            </span>
+          )}
           {canEdit && (
             <span className="delivery-actions-inline">
-              <button className="btn-link" onClick={() => setEditing(true)}>
-                {delivery?.partner_name ? 'Edit partner' : 'Set partner manually'}
-              </button>
-              {!delivery?.vehicle_type && (
-                <button className="btn-link" onClick={() => setBookingMode('motor')}>Book via MoveIT</button>
+              {delivery && (
+                <button className="btn-link" onClick={() => setEditing(true)}>
+                  {delivery?.partner_name ? 'Edit partner' : 'Set partner manually'}
+                </button>
+              )}
+              {!delivery && bookingAllowed && (
+                <>
+                  <button className="btn-link" onClick={() => setEditing(true)}>Set partner manually</button>
+                  <button className="btn-link" onClick={() => setBookingMode('motor')}>Book via MOTOR</button>
+                </>
               )}
             </span>
           )}
@@ -114,7 +138,7 @@ export default function DeliveryPanel({ orderId, viewerRole }) {
 
       {bookingMode && (
         <div className="delivery-form">
-          <div className="muted small">Booking via MoveIT</div>
+          <div className="muted small">Booking via MOTOR</div>
           <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)}>
             {VEHICLE_TYPES.map((v) => (
               <option key={v.id} value={v.id}>{v.label} — {v.desc} (up to {v.capacityKg}kg)</option>
@@ -130,7 +154,7 @@ export default function DeliveryPanel({ orderId, viewerRole }) {
           {error && <div className="alert alert-error">{error}</div>}
           <div className="delivery-form-actions">
             <button className="btn btn-primary" disabled={busy || !distanceKm} onClick={requestMotorVehicle}>
-              {busy ? 'Requesting…' : 'Book via MoveIT'}
+              {busy ? 'Requesting…' : 'Book via MOTOR'}
             </button>
             <button className="btn-link" onClick={() => { setBookingMode(null); setError('') }}>Cancel</button>
           </div>
@@ -147,7 +171,7 @@ export default function DeliveryPanel({ orderId, viewerRole }) {
 
       {canEdit && delivery && !editing && !bookingMode && isMotor && !delivery.delivered_at && (
         <div className="delivery-form-actions">
-          <button className="btn-link" onClick={markDelivered}>Force mark delivered (if MoveIT sync is stuck)</button>
+          <button className="btn-link" onClick={markDelivered}>Force mark delivered (if MOTOR sync is stuck)</button>
         </div>
       )}
     </div>
@@ -164,7 +188,7 @@ function summaryText(delivery, vehicleLabel) {
     parts.push(vehicleLabel || delivery.vehicle_type)
     if (delivery.distance_km) parts.push(`${delivery.distance_km} km`)
     if (delivery.fare_estimate) parts.push(`≈₹${delivery.fare_estimate}`)
-    if (delivery.fulfilled_via === 'motor') parts.push('via MoveIT')
+    if (delivery.fulfilled_via === 'motor') parts.push('via MOTOR')
     else parts.push(delivery.driver_id ? 'Driver assigned' : 'Waiting for a driver to accept')
   } else if (delivery.partner_name) {
     parts.push(delivery.partner_name)

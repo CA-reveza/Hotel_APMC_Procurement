@@ -1,6 +1,5 @@
 import { useState, Fragment } from 'react'
 import OrderCard from './OrderCard'
-import PaymentButton from './PaymentButton'
 import { getDeliveryStatus } from '../lib/deliveryStatus'
 
 const STATUS_LABEL = {
@@ -17,10 +16,10 @@ function orderDelivery(order) {
   return Array.isArray(order.deliveries) ? order.deliveries[0] : order.deliveries
 }
 
-// Mirrors SupplierOrderTable.jsx: a compact scan-friendly list for hotels,
-// expanding to the full OrderCard (items, delivery tracking, payment,
-// invoice) when the order number is clicked.
-export default function HotelOrderTable({ orders, onChanged }) {
+// Same compact scan-and-expand pattern as SupplierOrderTable.jsx, but with
+// both Hotel and Supplier columns since admin sees every order, not just
+// their own side of it.
+export default function AdminOrderTable({ orders, onChanged }) {
   const [expandedId, setExpandedId] = useState(null)
 
   if (!orders.length) return <p className="muted">No orders yet.</p>
@@ -30,8 +29,8 @@ export default function HotelOrderTable({ orders, onChanged }) {
       <table className="table">
         <thead>
           <tr>
+            <th>Hotel</th>
             <th>Supplier</th>
-            <th>APMC yard</th>
             <th>Order</th>
             <th>Amount</th>
             <th>Status</th>
@@ -43,12 +42,13 @@ export default function HotelOrderTable({ orders, onChanged }) {
           {orders.map((order) => {
             const isExpanded = expandedId === order.id
             const deliveryStatus = getDeliveryStatus(orderDelivery(order))
+            const isPaid = order.payment_status === 'paid'
             const grandTotal = Number(order.grand_total) || Number(order.order_total)
             return (
               <Fragment key={order.id}>
                 <tr>
+                  <td>{order.hotels?.name || '—'}</td>
                   <td>{order.suppliers?.name || '—'}</td>
-                  <td>{order.suppliers?.apmc_yard || '—'}</td>
                   <td>
                     <button
                       type="button"
@@ -62,15 +62,15 @@ export default function HotelOrderTable({ orders, onChanged }) {
                   <td><span className={`status-badge status-${order.status}`}>{STATUS_LABEL[order.status]}</span></td>
                   <td><span className={`delivery-badge delivery-${deliveryStatus.className}`}>{deliveryStatus.label}</span></td>
                   <td>
-                    {order.payment_status === 'paid'
-                      ? <span className="pay-badge pay-paid">✓ Paid</span>
-                      : <PaymentButton order={order} onPaid={onChanged} label="Make Payment" compact />}
+                    <span className={`pay-badge pay-${isPaid ? 'paid' : 'unpaid'}`}>
+                      {isPaid ? '✓ Paid' : 'Unpaid'}
+                    </span>
                   </td>
                 </tr>
                 {isExpanded && (
                   <tr>
                     <td colSpan={7} className="order-detail-cell">
-                      <OrderCard order={order} viewerRole="hotel" onChanged={onChanged} />
+                      <OrderCard order={order} viewerRole="admin" onChanged={onChanged} />
                     </td>
                   </tr>
                 )}

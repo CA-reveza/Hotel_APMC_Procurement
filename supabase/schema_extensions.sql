@@ -139,6 +139,25 @@ create policy "quotes_update_supplier" on supplier_quotes
     exists (select 1 from suppliers s where s.id = supplier_id and s.profile_id = auth.uid())
   );
 
+-- ----------------------------------------------------------------------------
+-- Supplier-initiated payment requests (Razorpay Payment Links) + manual
+-- "mark as paid" for cash/bank-transfer settlements collected offline.
+-- Adds an in-between 'requested' payment_status: order has a live payment
+-- link out to the hotel but isn't paid yet. Existing 'unpaid'/'paid' checks
+-- in the app (`payment_status !== 'paid'`) keep working unchanged.
+-- ----------------------------------------------------------------------------
+alter table orders drop constraint if exists orders_payment_status_check;
+alter table orders add constraint orders_payment_status_check
+  check (payment_status in ('unpaid','requested','paid','refunded'));
+
+alter table payments add column if not exists method text not null default 'razorpay'
+  check (method in ('razorpay','manual'));
+alter table payments add column if not exists link_id text;
+alter table payments add column if not exists short_url text;
+alter table payments drop constraint if exists payments_status_check;
+alter table payments add constraint payments_status_check
+  check (status in ('created','paid','failed','cancelled'));
+
 do $$
 begin
   begin

@@ -4,7 +4,9 @@ import { supabase } from '../supabaseClient'
 // Loads Razorpay Checkout for a single order. The key SECRET never touches
 // this file — order creation and signature verification both happen inside
 // Supabase Edge Functions (see supabase/functions/).
-export default function PaymentButton({ order, onPaid }) {
+// `compact` shrinks the button for use inline in a table row; `label`
+// overrides the default "Pay ₹..." text (e.g. "Make Payment" in the table).
+export default function PaymentButton({ order, onPaid, label, compact }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -54,8 +56,8 @@ export default function PaymentButton({ order, onPaid }) {
 
   return (
     <div>
-      <button className="btn btn-primary" disabled={busy} onClick={payNow}>
-        {busy ? 'Opening payment…' : `Pay ₹${Number(order.order_total).toFixed(2)}`}
+      <button className={`btn btn-primary${compact ? ' btn-sm' : ''}`} disabled={busy} onClick={payNow}>
+        {busy ? 'Opening payment…' : label || `Pay ₹${(Number(order.grand_total) || Number(order.order_total)).toFixed(2)}`}
       </button>
       {error && <div className="alert alert-error">{error}</div>}
     </div>

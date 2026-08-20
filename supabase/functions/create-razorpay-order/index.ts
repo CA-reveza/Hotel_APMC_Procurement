@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
 
     const { data: order, error: orderErr } = await callerClient
       .from('orders')
-      .select('id, order_total, payment_status')
+      .select('id, order_total, grand_total, payment_status')
       .eq('id', order_id)
       .single()
 
@@ -38,7 +38,11 @@ Deno.serve(async (req) => {
 
     const keyId = Deno.env.get('RAZORPAY_KEY_ID')!
     const keySecret = Deno.env.get('RAZORPAY_KEY_SECRET')!
-    const amountPaise = Math.round(order.order_total * 100)
+    // grand_total (items + 3% platform fee + delivery charge) is what the
+    // hotel actually owes — fall back to order_total only for orders that
+    // predate the platform-fee migration and never got a grand_total set.
+    const chargeAmount = order.grand_total || order.order_total
+    const amountPaise = Math.round(chargeAmount * 100)
 
     const rpRes = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
@@ -65,7 +69,7 @@ Deno.serve(async (req) => {
     await adminClient.from('payments').insert({
       order_id: order.id,
       razorpay_order_id: rpOrder.id,
-      amount: order.order_total,
+      amount: chargeAmount,
       status: 'created'
     })
 

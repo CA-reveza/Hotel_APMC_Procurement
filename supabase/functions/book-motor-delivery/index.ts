@@ -61,10 +61,19 @@ Deno.serve(async (req) => {
     })
     const { data: order, error: orderErr } = await userClient
       .from('orders')
-      .select('id, delivery_address, hotels(name, address), suppliers(name, apmc_yard, address)')
+      .select('id, status, payment_status, delivery_address, hotels(name, address), suppliers(name, apmc_yard, address)')
       .eq('id', order_id)
       .single()
     if (orderErr || !order) return json({ error: 'Order not found or not accessible' }, 404)
+
+    // Same gate as DeliveryPanel.jsx enforces in the UI — checked again here
+    // server-side so this can't be bypassed by calling the function directly.
+    if (order.payment_status !== 'paid') {
+      return json({ error: 'Order must be paid before a delivery can be booked' }, 400)
+    }
+    if (!['packed', 'out_for_delivery', 'delivered'].includes(order.status)) {
+      return json({ error: 'Order must be packed before a delivery can be booked' }, 400)
+    }
 
     const fare = estimateFare(vehicle_type, Number(distance_km))
     const pickup = order.suppliers?.address || order.suppliers?.apmc_yard || order.suppliers?.name || 'Supplier'
@@ -110,6 +119,12 @@ Deno.serve(async (req) => {
       },
       { onConflict: 'order_id' }
     )
+
+    // Replace the checkout-time delivery estimate with the real fare now
+    // that an actual distance/vehicle has been booked — the grand_total sync
+    // trigger (schema_grand_total_sync_trigger.sql) recomputes the order's
+    // total automatically from this.
+    await adminClient.from('orders').update({ delivery_charge: fare }).eq('id', order.id)
 
     return json({ motor_booking_id: booking.id, fare_estimate: fare, status: booking.status })
   } catch (e) {

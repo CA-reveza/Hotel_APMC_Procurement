@@ -5,6 +5,7 @@ import HotelSpendReport from '../components/HotelSpendReport'
 import QuoteRequests from '../components/QuoteRequests'
 import { downloadHotelOrderTemplate, parseHotelOrderTemplate } from '../lib/excelTemplates'
 import { CATEGORY_TILES, categoryTileFor } from '../lib/categoryTiles'
+import { deliveryCharge, platformFee, BASE_DELIVERY_KM, BASE_DELIVERY_CHARGE, PER_KM_CHARGE } from '../lib/orderFees'
 
 export default function HotelDashboard({ hotel }) {
   const [tab, setTab] = useState('order') // 'order' | 'orders' | 'bidding'
@@ -19,6 +20,7 @@ export default function HotelDashboard({ hotel }) {
   const [message, setMessage] = useState('')
   const [bulkMessage, setBulkMessage] = useState('')
   const [bulkBusy, setBulkBusy] = useState(false)
+  const [distanceKm, setDistanceKm] = useState(BASE_DELIVERY_KM)
   const fileInputRef = useRef(null)
 
   const loadSuppliers = useCallback(async () => {
@@ -76,7 +78,7 @@ export default function HotelDashboard({ hotel }) {
   }, [hotel, loadOrders])
 
   // Realtime: deliveries has no hotel_id to filter on, so just refresh on any
-  // change — this is what makes a MoveIT driver's status update (pushed via
+  // change — this is what makes a MOTOR driver's status update (pushed via
   // the motor-status-webhook Edge Function) show up live without a reload.
   useEffect(() => {
     if (!hotel?.id) return
@@ -101,6 +103,9 @@ export default function HotelDashboard({ hotel }) {
   }, [cart, priceRows])
 
   const cartTotal = cartLines.reduce((sum, l) => sum + l.lineTotal, 0)
+  const deliveryChargeAmount = deliveryCharge(distanceKm)
+  const platformFeeAmount = platformFee(cartTotal)
+  const grandTotal = cartTotal + platformFeeAmount + deliveryChargeAmount
   const selectedSupplierName = suppliers.find((s) => s.id === supplierId)?.name
 
   const setQty = (productId, qty) => {
@@ -142,7 +147,13 @@ export default function HotelDashboard({ hotel }) {
 
     const { data: order, error: orderErr } = await supabase
       .from('orders')
-      .insert({ hotel_id: hotel.id, supplier_id: supplierId, delivery_address: hotel.address })
+      .insert({
+        hotel_id: hotel.id,
+        supplier_id: supplierId,
+        delivery_address: hotel.address,
+        delivery_distance_km: distanceKm,
+        delivery_charge: deliveryChargeAmount
+      })
       .select()
       .single()
 
@@ -163,7 +174,7 @@ export default function HotelDashboard({ hotel }) {
     if (itemsErr) {
       setMessage(`Order created but items failed: ${itemsErr.message}`)
     } else {
-      setMessage(`Order placed! Total ₹${cartTotal.toFixed(2)}.`)
+      setMessage(`Order placed! Grand total ₹${grandTotal.toFixed(2)} (items ₹${cartTotal.toFixed(2)} + platform fee ₹${platformFeeAmount.toFixed(2)} + delivery ₹${deliveryChargeAmount.toFixed(2)}).`)
       setCart({})
       loadOrders()
     }
@@ -278,7 +289,32 @@ export default function HotelDashboard({ hotel }) {
             ))}
             {cartLines.length > 0 && (
               <>
-                <div className="cart-total">Total: ₹{cartTotal.toFixed(2)}</div>
+                <label style={{ marginTop: 10 }}>Delivery distance (km)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  className="qty-input"
+                  value={distanceKm}
+                  onChange={(e) => setDistanceKm(parseFloat(e.target.value) || 0)}
+                />
+                <p className="muted small" style={{ marginTop: 4 }}>
+                  ₹{BASE_DELIVERY_CHARGE} up to {BASE_DELIVERY_KM} km, then +₹{PER_KM_CHARGE}/km beyond that.
+                </p>
+
+                <div className="cart-line muted small" style={{ marginTop: 10 }}>
+                  <span>Items subtotal</span>
+                  <span>₹{cartTotal.toFixed(2)}</span>
+                </div>
+                <div className="cart-line muted small">
+                  <span>Platform fee (3%)</span>
+                  <span>₹{platformFeeAmount.toFixed(2)}</span>
+                </div>
+                <div className="cart-line muted small">
+                  <span>Delivery charge</span>
+                  <span>₹{deliveryChargeAmount.toFixed(2)}</span>
+                </div>
+                <div className="cart-total">Grand total: ₹{grandTotal.toFixed(2)}</div>
                 <button className="btn btn-primary" disabled={placing} onClick={placeOrder}>
                   {placing ? 'Placing order…' : 'Place order'}
                 </button>

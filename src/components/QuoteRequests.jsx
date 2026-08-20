@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, Fragment } from 'react'
 import { supabase } from '../supabaseClient'
+import { BASE_DELIVERY_KM, BASE_DELIVERY_CHARGE, platformFee } from '../lib/orderFees'
 
 export default function QuoteRequests({ hotel, products, onOrderPlaced }) {
   const [requests, setRequests] = useState([])
@@ -92,9 +93,18 @@ export default function QuoteRequests({ hotel, products, onOrderPlaced }) {
 
   const acceptQuote = async (request, quote) => {
     setMessage('')
+    // Quote acceptance doesn't have its own distance input — default to the
+    // base tier; the hotel can see/adjust the actual grand total on the
+    // order detail once created, same as a normal cart checkout.
     const { data: order, error: orderErr } = await supabase
       .from('orders')
-      .insert({ hotel_id: hotel.id, supplier_id: quote.supplier_id, delivery_address: hotel.address })
+      .insert({
+        hotel_id: hotel.id,
+        supplier_id: quote.supplier_id,
+        delivery_address: hotel.address,
+        delivery_distance_km: BASE_DELIVERY_KM,
+        delivery_charge: BASE_DELIVERY_CHARGE
+      })
       .select()
       .single()
     if (orderErr) { setMessage(`Failed: ${orderErr.message}`); return }
@@ -111,7 +121,8 @@ export default function QuoteRequests({ hotel, products, onOrderPlaced }) {
     await supabase.from('order_items').insert(items)
     await supabase.from('quote_requests').update({ status: 'closed' }).eq('id', request.id)
 
-    setMessage(`Order placed with ${quote.suppliers?.name} — total ₹${Number(quote.total_price).toFixed(2)}.`)
+    const grandTotal = Number(quote.total_price) + platformFee(quote.total_price) + BASE_DELIVERY_CHARGE
+    setMessage(`Order placed with ${quote.suppliers?.name} — items ₹${Number(quote.total_price).toFixed(2)}, grand total ≈₹${grandTotal.toFixed(2)} (includes 3% platform fee + delivery — review the exact total on the order).`)
     load()
     onOrderPlaced?.()
   }

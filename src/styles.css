@@ -101,6 +101,7 @@ select {
 }
 .btn-primary { background: var(--primary); color: white; }
 .btn-primary:hover { background: var(--primary-dark); }
+.btn-sm { padding: 5px 10px; font-size: 0.78rem; margin-top: 0; }
 .btn-danger { background: var(--danger); color: white; margin-left: 8px; }
 .btn-ghost { background: transparent; color: white; border: 1px solid rgba(255,255,255,0.4); }
 .btn-ghost-dark { background: transparent; color: var(--primary); border: 1px solid var(--primary); }
@@ -112,9 +113,18 @@ select {
 .order-card-badges { display: flex; gap: 6px; margin: 6px 0; }
 .pay-badge { padding: 3px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
 .pay-unpaid { background: #fde7cd; color: #9a4d00; }
+.pay-requested { background: #fef3c7; color: #92400e; }
 .pay-paid { background: #dcf5e3; color: #1c6e4a; }
 .pay-refunded { background: #e5e7eb; color: #374151; }
 .pay-whatsapp { background: #dbf5e3; color: #1c6e4a; }
+
+.payment-actions { display: flex; flex-direction: column; gap: 8px; }
+.payment-actions-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+.payment-link-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.payment-link-input {
+  flex: 1; min-width: 200px; padding: 7px 9px; border: 1px solid var(--border);
+  border-radius: 6px; font-size: 0.82rem; color: var(--muted); background: #fafbfc;
+}
 
 .delivery-panel { margin: 10px 0; padding: 10px; background: #fafbfc; border: 1px dashed var(--border); border-radius: 8px; }
 .delivery-summary { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
