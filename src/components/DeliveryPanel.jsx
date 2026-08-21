@@ -18,12 +18,12 @@ import MotorStatus from './MotorStatus'
 // "Set partner manually" is temporarily removed (MoveIT-only for now) —
 // the code is still here, just not rendered, so it's a one-line change to
 // bring back later.
-export default function DeliveryPanel({ orderId, viewerRole, orderStatus, paymentStatus, orderDeliveryCharge }) {
+export default function DeliveryPanel({ orderId, viewerRole, orderStatus, paymentStatus, orderDeliveryCharge, orderDistanceKm }) {
   const [delivery, setDelivery] = useState(null)
   const [editing, setEditing] = useState(false)
   const [bookingMode, setBookingMode] = useState(null)
   const [form, setForm] = useState({ delivery_type: 'direct', hub_name: '', partner_name: '', partner_phone: '' })
-  const [vehicleType, setVehicleType] = useState(VEHICLE_TYPES[0].id)
+  const [vehicleType, setVehicleType] = useState('')
   const [distanceKm, setDistanceKm] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -117,7 +117,16 @@ export default function DeliveryPanel({ orderId, viewerRole, orderStatus, paymen
                   {SHOW_MANUAL_PARTNER && (
                     <button className="btn-link" onClick={() => setEditing(true)}>Set partner manually</button>
                   )}
-                  <button className="btn-link" onClick={() => setBookingMode('motor')}>Book via MoveIT</button>
+                  <button
+                    className="btn-link"
+                    onClick={() => {
+                      setVehicleType('')
+                      setDistanceKm(orderDistanceKm ? String(orderDistanceKm) : '')
+                      setBookingMode('motor')
+                    }}
+                  >
+                    Book via MoveIT
+                  </button>
                 </>
               )}
             </span>
@@ -147,20 +156,26 @@ export default function DeliveryPanel({ orderId, viewerRole, orderStatus, paymen
         <div className="delivery-form">
           <div className="muted small">Booking via MoveIT</div>
           <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)}>
+            <option value="" disabled>Select vehicle type…</option>
             {VEHICLE_TYPES.map((v) => (
               <option key={v.id} value={v.id}>{v.label} — {v.desc} (up to {v.capacityKg}kg)</option>
             ))}
           </select>
           <input
-            type="number" min="0" step="0.5" placeholder="Distance (km, for MoveIT's own route record)"
+            type="number" min="0" step="0.5" placeholder="Distance (km)"
             value={distanceKm} onChange={(e) => setDistanceKm(e.target.value)}
           />
+          <div className="muted small">
+            {orderDistanceKm
+              ? `Pre-filled from this order's delivery distance (${orderDistanceKm} km) — adjust only if it's wrong.`
+              : `No distance was recorded on this order at checkout — enter it for MoveIT's route record.`}
+          </div>
           <div className="muted small">
             Delivery charge (from this order, already fixed at checkout): ₹{Number(orderDeliveryCharge || 0).toFixed(2)}
           </div>
           {error && <div className="alert alert-error">{error}</div>}
           <div className="delivery-form-actions">
-            <button className="btn btn-primary" disabled={busy || !distanceKm} onClick={requestMotorVehicle}>
+            <button className="btn btn-primary" disabled={busy || !distanceKm || !vehicleType} onClick={requestMotorVehicle}>
               {busy ? 'Requesting…' : 'Book via MoveIT'}
             </button>
             <button className="btn-link" onClick={() => { setBookingMode(null); setError('') }}>Cancel</button>

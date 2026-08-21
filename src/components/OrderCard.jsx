@@ -108,6 +108,7 @@ export default function OrderCard({ order, viewerRole, onChanged, onBack }) {
         orderStatus={order.status}
         paymentStatus={order.payment_status}
         orderDeliveryCharge={order.delivery_charge}
+        orderDistanceKm={order.delivery_distance_km}
       />
 
       {paymentGateBlocked && viewerRole === 'supplier' && (
