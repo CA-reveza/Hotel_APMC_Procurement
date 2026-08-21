@@ -72,7 +72,7 @@ export default function SupplierOrderTable({ orders, onChanged }) {
                 {isExpanded && (
                   <tr>
                     <td colSpan={8} className="order-detail-cell">
-                      <OrderCard order={order} viewerRole="supplier" onChanged={onChanged} />
+                      <OrderCard order={order} viewerRole="supplier" onChanged={onChanged} onBack={() => setExpandedId(null)} />
                     </td>
                   </tr>
                 )}

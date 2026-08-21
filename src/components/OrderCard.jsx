@@ -25,7 +25,7 @@ const STATUS_LABEL = {
   cancelled: 'Cancelled'
 }
 
-export default function OrderCard({ order, viewerRole, onChanged }) {
+export default function OrderCard({ order, viewerRole, onChanged, onBack }) {
   const [busy, setBusy] = useState(false)
   const delivery = Array.isArray(order.deliveries) ? order.deliveries[0] : order.deliveries
 
@@ -46,6 +46,11 @@ export default function OrderCard({ order, viewerRole, onChanged }) {
 
   return (
     <div className="card order-card">
+      {onBack && (
+        <button type="button" className="btn-link" onClick={onBack} style={{ marginBottom: 10 }}>
+          ← Back to orders
+        </button>
+      )}
       <div className="order-card-header">
         <div>
           <strong>Order #{order.id.slice(0, 8)}</strong>
@@ -90,7 +95,7 @@ export default function OrderCard({ order, viewerRole, onChanged }) {
           <div className="muted small">Delivery charge: ₹{Number(order.delivery_charge || 0).toFixed(2)}</div>
           <div>Grand total: <strong>₹{grandTotal.toFixed(2)}</strong></div>
         </div>
-        {viewerRole !== 'hotel' && (
+        {viewerRole === 'admin' && (
           <div className="muted small">
             Commission ({order.commission_pct}%): ₹{Number(order.commission_amount).toFixed(2)} · Delivery contribution: ₹{Number(order.delivery_contribution).toFixed(2)}
           </div>

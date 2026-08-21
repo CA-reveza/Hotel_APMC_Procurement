@@ -70,7 +70,7 @@ export default function HotelOrderTable({ orders, onChanged }) {
                 {isExpanded && (
                   <tr>
                     <td colSpan={7} className="order-detail-cell">
-                      <OrderCard order={order} viewerRole="hotel" onChanged={onChanged} />
+                      <OrderCard order={order} viewerRole="hotel" onChanged={onChanged} onBack={() => setExpandedId(null)} />
                     </td>
                   </tr>
                 )}

@@ -50,7 +50,7 @@ export default function App() {
             )}
             {profile.role === 'driver' && (
               <>
-                <Route path="/" element={<DriverDashboard profile={profile} driver={orgRecord} />} />
+                <Route path="/" element={<DriverDashboard profile={profile} driver={orgRecord} onDriverUpdate={refreshOrgRecord} />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </>
             )}

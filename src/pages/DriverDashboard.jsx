@@ -2,11 +2,23 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../supabaseClient'
 import { vehicleById } from '../lib/vehiclePricing'
 
-export default function DriverDashboard({ profile, driver }) {
+export default function DriverDashboard({ profile, driver, onDriverUpdate }) {
   const [tab, setTab] = useState('available')
   const [available, setAvailable] = useState([])
   const [mine, setMine] = useState([])
   const [busy, setBusy] = useState('')
+  const [togglingOnline, setTogglingOnline] = useState(false)
+
+  useEffect(() => {
+    if (!driver?.id) return
+    const channel = supabase
+      .channel(`driver-self-${driver.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'drivers', filter: `id=eq.${driver.id}` }, () => {
+        onDriverUpdate?.()
+      })
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [driver?.id, onDriverUpdate])
 
   const loadAvailable = useCallback(async () => {
     const { data } = await supabase
@@ -41,6 +53,17 @@ export default function DriverDashboard({ profile, driver }) {
     return () => supabase.removeChannel(channel)
   }, [profile.id, loadAvailable, loadMine])
 
+  const toggleOnline = async () => {
+    if (!driver) return
+    setTogglingOnline(true)
+    const { error } = await supabase
+      .from('drivers')
+      .update({ is_online: !driver.is_online })
+      .eq('id', driver.id)
+    setTogglingOnline(false)
+    if (!error) onDriverUpdate?.()
+  }
+
   const accept = async (deliveryId) => {
     setBusy(deliveryId)
     const { error } = await supabase
@@ -63,10 +86,28 @@ export default function DriverDashboard({ profile, driver }) {
 
   return (
     <div>
-      <h2>{driver?.name}</h2>
-      <p className="muted small">
-        {driver?.vehicle_type ? vehicleById(driver.vehicle_type)?.label : ''} {driver?.vehicle_number ? `· ${driver.vehicle_number}` : ''}
-      </p>
+      <div className="order-card-header">
+        <div>
+          <h2>{driver?.name}</h2>
+          <p className="muted small">
+            {driver?.vehicle_type ? vehicleById(driver.vehicle_type)?.label : ''} {driver?.vehicle_number ? `· ${driver.vehicle_number}` : ''}
+          </p>
+        </div>
+        {driver?.motor_driver_id ? (
+          <span className={`status-badge ${driver?.is_online ? 'status-online' : 'status-offline'}`} title="Synced from your MoveIT driver app">
+            {driver?.is_online ? '● Online' : '○ Offline'} <span className="muted">(via MoveIT)</span>
+          </span>
+        ) : (
+          <button
+            className={`status-badge ${driver?.is_online ? 'status-online' : 'status-offline'}`}
+            style={{ border: 'none', cursor: 'pointer' }}
+            disabled={togglingOnline}
+            onClick={toggleOnline}
+          >
+            {togglingOnline ? 'Updating…' : driver?.is_online ? '● Online' : '○ Offline'}
+          </button>
+        )}
+      </div>
 
       <div className="tabs">
         <button className={tab === 'available' ? 'tab active' : 'tab'} onClick={() => setTab('available')}>Available ({available.length})</button>

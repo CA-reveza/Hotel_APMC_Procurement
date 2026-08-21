@@ -70,7 +70,7 @@ export default function AdminOrderTable({ orders, onChanged }) {
                 {isExpanded && (
                   <tr>
                     <td colSpan={7} className="order-detail-cell">
-                      <OrderCard order={order} viewerRole="admin" onChanged={onChanged} />
+                      <OrderCard order={order} viewerRole="admin" onChanged={onChanged} onBack={() => setExpandedId(null)} />
                     </td>
                   </tr>
                 )}

@@ -48,4 +48,24 @@ create policy "Public can read orderit-sourced bookings" on bookings
 -- This is what makes "driver accepted in MOTOR" show up live in OrderIT's
 -- Hotel and Supplier order lists, not just when someone happens to have that
 -- specific order's delivery panel open.
+--
+-- ----------------------------------------------------------------------------
+-- Also set up a second webhook for driver online/offline sync (see OrderIT's
+-- schema_motor_driver_link.sql and motor-driver-status-webhook Edge
+-- Function). This makes a driver's status in MoveIT's own console — where
+-- they actually go online/offline while working — show up automatically in
+-- OrderIT's driver dashboard and admin fleet view too, once an admin links
+-- the two accounts (OrderIT → Admin → Drivers → "Linked MoveIT driver ID").
+--
+-- MOTOR project → Database → Webhooks → Create a new webhook
+--   Name:    orderit-driver-status-sync
+--   Table:   profiles
+--   Events:  Update
+--   Type:    HTTP Request
+--   Method:  POST
+--   URL:     <OrderIT's motor-driver-status-webhook Edge Function URL>
+--            (find it under OrderIT's project → Edge Functions →
+--            motor-driver-status-webhook, after deploying it)
+--   HTTP Headers: add one —
+--     x-webhook-secret: <same MOTOR_WEBHOOK_SECRET value as above>
 -- ============================================================================

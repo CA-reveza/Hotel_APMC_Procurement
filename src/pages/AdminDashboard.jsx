@@ -10,6 +10,9 @@ export default function AdminDashboard() {
   const [drivers, setDrivers] = useState([])
   const [orders, setOrders] = useState([])
   const [deliveries, setDeliveries] = useState([])
+  const [linkEdits, setLinkEdits] = useState({}) // { [driverId]: motorDriverIdInput }
+  const [linkSaving, setLinkSaving] = useState(null)
+  const [linkError, setLinkError] = useState('')
 
   const loadAll = useCallback(async () => {
     const [{ data: h }, { data: s }, { data: dr }, { data: o }, { data: d }] = await Promise.all([
@@ -43,6 +46,27 @@ export default function AdminDashboard() {
   const activeOrders = orders.filter((o) => !['delivered', 'rejected', 'cancelled'].includes(o.status)).length
   const paidOrders = orders.filter((o) => o.payment_status === 'paid').length
   const whatsappOrders = orders.filter((o) => o.source === 'whatsapp').length
+
+  async function saveMotorLink(driver) {
+    const raw = (linkEdits[driver.id] ?? driver.motor_driver_id ?? '').trim()
+    setLinkError('')
+    setLinkSaving(driver.id)
+    const { error } = await supabase
+      .from('drivers')
+      .update({ motor_driver_id: raw || null })
+      .eq('id', driver.id)
+    setLinkSaving(null)
+    if (error) {
+      setLinkError(error.message)
+    } else {
+      setLinkEdits((prev) => {
+        const next = { ...prev }
+        delete next[driver.id]
+        return next
+      })
+      loadAll()
+    }
+  }
 
   return (
     <div>
@@ -127,24 +151,47 @@ export default function AdminDashboard() {
 
       {tab === 'drivers' && (
         <table className="table">
-          <thead><tr><th>Name</th><th>Phone</th><th>Vehicle</th><th>Vehicle no.</th><th>Status</th></tr></thead>
+          <thead><tr><th>Name</th><th>Phone</th><th>Vehicle</th><th>Vehicle no.</th><th>Status</th><th>Linked MoveIT driver ID</th></tr></thead>
           <tbody>
-            {drivers.map((d) => (
-              <tr key={d.id}>
-                <td>{d.name}</td><td>{d.phone}</td>
-                <td>{vehicleById(d.vehicle_type)?.label || d.vehicle_type}</td>
-                <td>{d.vehicle_number}</td>
-                <td>
-                  <span className={`status-badge ${d.is_online ? 'status-online' : 'status-offline'}`}>
-                    {d.is_online ? 'Online' : 'Offline'}
-                  </span>
-                </td>
-              </tr>
-            ))}
-            {!drivers.length && <tr><td colSpan={5} className="muted">No delivery partners registered yet.</td></tr>}
+            {drivers.map((d) => {
+              const linkValue = linkEdits[d.id] ?? d.motor_driver_id ?? ''
+              const dirty = linkEdits[d.id] !== undefined && linkEdits[d.id] !== (d.motor_driver_id ?? '')
+              return (
+                <tr key={d.id}>
+                  <td>{d.name}</td><td>{d.phone}</td>
+                  <td>{vehicleById(d.vehicle_type)?.label || d.vehicle_type}</td>
+                  <td>{d.vehicle_number}</td>
+                  <td>
+                    <span className={`status-badge ${d.is_online ? 'status-online' : 'status-offline'}`}>
+                      {d.is_online ? 'Online' : 'Offline'}
+                    </span>
+                    {d.motor_driver_id && <div className="muted small">synced from MoveIT</div>}
+                  </td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <input
+                        value={linkValue}
+                        placeholder="MoveIT driver's user id"
+                        onChange={(e) => setLinkEdits((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                        style={{ minWidth: 220 }}
+                      />
+                      <button
+                        className="btn btn-ghost-dark"
+                        disabled={!dirty || linkSaving === d.id}
+                        onClick={() => saveMotorLink(d)}
+                      >
+                        {linkSaving === d.id ? 'Saving…' : 'Save'}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+            {!drivers.length && <tr><td colSpan={6} className="muted">No delivery partners registered yet.</td></tr>}
           </tbody>
         </table>
       )}
+      {tab === 'drivers' && linkError && <p className="alert alert-error" style={{ marginTop: 12 }}>{linkError}</p>}
     </div>
   )
 }

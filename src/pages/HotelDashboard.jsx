@@ -78,7 +78,7 @@ export default function HotelDashboard({ hotel }) {
   }, [hotel, loadOrders])
 
   // Realtime: deliveries has no hotel_id to filter on, so just refresh on any
-  // change — this is what makes a MOTOR driver's status update (pushed via
+  // change — this is what makes a MoveIT driver's status update (pushed via
   // the motor-status-webhook Edge Function) show up live without a reload.
   useEffect(() => {
     if (!hotel?.id) return
